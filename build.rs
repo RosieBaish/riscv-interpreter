@@ -4,6 +4,10 @@ use std::io::prelude::*;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+#[path = "src/build_common.rs"]
+mod build_common;
+use build_common::*;
+
 #[derive(Debug)]
 struct Instruction {
   mnemonic: String,

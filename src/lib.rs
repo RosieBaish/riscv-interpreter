@@ -1,3 +1,6 @@
+mod build_common;
+use build_common::*;
+mod registers;
 mod utils;
 
 use wasm_bindgen::prelude::*;
@@ -25,19 +28,42 @@ extern "C" {
   fn alert(s: &str);
 }
 
-fn parse_reg(code: &str) -> Option<u32> {
-  let leaders = code.split(|c: char| !c.is_ascii_alphanumeric());
-  None
-}
-
 impl Instruction {
-  pub fn parse(&self, orig_code: &str) -> Vec<u32> {
-    let code: &mut str = orig_code.clone();
-    let mut syntax_index = 0;
-    while code != "" {
-      code = code.trim();
+  pub fn format_error(&self, tokens: Vec<String>) {
+    alert(format!("Invalid instruction format. Instruction \"{}\" should have format \"{}\" but instead had \"{}\"", self.mnemonic, self.syntax.join(" "), tokens.join(" ")).as_str());
+  }
+
+  pub fn parse(&self, code: &str) -> Option<Vec<u32>> {
+    let tokens: Vec<String> = tokenise(code);
+    if tokens.len() != self.syntax.len() {
+      self.format_error(tokens);
+      return None;
     }
-    return vec![];
+    let mut arguments: Vec<u32> = Vec::new();
+    for (actual, expected) in core::iter::zip(tokens.iter(), self.syntax.iter())
+    {
+      if expected.eq(&"rd") || expected.eq(&"rs1") || expected.eq(&"rs2") {
+        let reg_num = registers::NAMES.get(actual);
+        if reg_num.is_none() {
+          self.format_error(tokens);
+          return None;
+        }
+        arguments.push(*reg_num.unwrap());
+      } else if expected.eq(&"imm") {
+        let val: Option<u32> = actual.parse::<u32>().ok();
+        if val.is_none() {
+          self.format_error(tokens);
+          return None;
+        }
+        arguments.push(val.unwrap());
+      } else if actual == expected {
+        // If it matches, we're good
+      } else {
+        self.format_error(tokens);
+        return None;
+      }
+    }
+    return Some(arguments);
   }
 }
 
@@ -101,11 +127,13 @@ impl Interpreter {
   fn parse(&self) {
     for (ln, line) in self.code.lines().enumerate() {
       let line_num = ln + 1; // Source is 1 indexed
-      let instruction = line.split("//").nth(0).unwrap().trim();
+      let instruction: &str = line.split("//").nth(0).unwrap().trim();
       if instruction == "" {
         continue;
       }
-      let opt_inst: Option<&Instruction> = INSTRUCTIONS.get(instruction);
+
+      let opt_inst: Option<&Instruction> =
+        INSTRUCTIONS.get(instruction.split_whitespace().nth(0).unwrap());
       if opt_inst.is_none() {
         alert(
           format!("Invalid instruction on line {}: {}", line_num, instruction)

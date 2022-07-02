@@ -15,7 +15,7 @@ phf_codegen = "0.10.0"
 [dependencies]
 wasm-bindgen = "0.2.63"
 web-sys = { version = "0.3.39", features = ['Window', 'Document', 'Element', 'HtmlTextAreaElement'] }
-phf = "0.10.1"
+phf = { version = "0.10", features = ["macros"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
