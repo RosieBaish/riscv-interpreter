@@ -65,7 +65,7 @@ fn parse_org_table(org_table: &str) -> Vec<Instruction> {
 }
 
 fn main() -> std::io::Result<()> {
-  let mut file = File::open("../asm_spec/rv64_i.org")?;
+  let mut file = File::open("rv64_i.org")?;
   let mut contents = String::new();
   file.read_to_string(&mut contents)?;
   let instructions = parse_org_table(&contents);
