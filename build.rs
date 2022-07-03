@@ -20,9 +20,61 @@ struct Instruction {
 const NUM_COLUMNS: usize = 5;
 
 impl Instruction {
+  fn reg_or_imm(arg: &String) -> &'static str {
+    if arg.eq(&"imm".to_string()) {
+      return "Immediate";
+    } else {
+      return "Register";
+    }
+  }
+
+  fn get_args(&self) -> Vec<&String> {
+    self
+      .syntax
+      .iter()
+      .filter(|x| x.chars().all(char::is_alphanumeric))
+      .skip(1) // First one is the mnemonic, not an arg
+      .collect()
+  }
+
+  /*
+        implementation: |args: Vec<ImplementationArg>| if let [ImplementationArg::Register(rd), ImplementationArg::Immediate(imm)] = &args {
+          |x| x[rd] = sext(imm << 12);
+        } else {
+          unreachable!(Wrong arguments);
+        }
+      },
+    )],
+  };
+  */
+  fn create_implementation_source(&self) -> String {
+    let mut impl_src = String::from(format!(
+      "fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [u32; 32])> \n {{\n if let [",
+      self.mnemonic
+    ));
+    for arg in self.get_args() {
+      impl_src.push_str(
+        format!(
+          "ImplementationArg::{}({}), ",
+          Instruction::reg_or_imm(arg),
+          arg
+        )
+        .as_str(),
+      );
+    }
+    impl_src.push_str(
+      format!(
+        "] = args[..] \n{{ \n\tBox::new(move |x: &mut [u32; 32]| {}) }} else {{ unreachable!(\"Wrong arg type\") }}\n}}",
+        self.implementation
+      )
+      .as_str(),
+    );
+    impl_src
+  }
+
   fn as_source(&self) -> String {
     let syntax_str = "&[\"".to_string() + &self.syntax.join("\", \"") + "\"]";
-    format!("Instruction {{ mnemonic: \"{}\", expansion: \"{}\", syntax: {}, description: r#\"{}\"#, implementation: \"{}\", }}", self.mnemonic, self.expansion, syntax_str, self.description, self.implementation)
+    format!("InstructionSource {{ mnemonic: \"{}\", expansion: \"{}\", syntax: {}, description: r#\"{}\"#, implementation_str: \"{}\", implementation: {} }}", self.mnemonic, self.expansion, syntax_str, self.description, self.implementation, self.mnemonic)
   }
 }
 
@@ -75,12 +127,18 @@ fn main() -> std::io::Result<()> {
 
   let mut instruction_map = phf_codegen::Map::new();
   for instruction in instructions {
+    write!(
+      &mut file,
+      "{}\n",
+      instruction.create_implementation_source()
+    )
+    .unwrap();
     instruction_map
       .entry(instruction.mnemonic.clone(), &instruction.as_source());
   }
   write!(
     &mut file,
-    "static INSTRUCTIONS: phf::Map<&'static str, Instruction> = {}",
+    "#[allow(unused_must_use)]\nstatic INSTRUCTIONS: phf::Map<&'static str, InstructionSource> = {}",
     instruction_map.build(),
   )
   .unwrap();
