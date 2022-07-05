@@ -103,7 +103,7 @@ fn parse_org_table(org_table: &str) -> Vec<Instruction> {
   for title in column_titles {
     print!("{}\n", title.trim());
   }
-  lines = lines[2..].to_vec();
+  lines = lines[3..].to_vec();
   lines.pop();
   let mut instructions: Vec<Instruction> = Vec::new();
   for line in lines {
