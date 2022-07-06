@@ -1,3 +1,4 @@
+{% import "macros.html" as macros %}
 <!DOCTYPE html>
 <html>
     <meta charset="utf-8">
@@ -8,6 +9,68 @@
     <link rel="stylesheet" type="text/css" href="static/bootstrap.min.css">
     <link rel="stylesheet" type="text/css" href="static/jquery-linedtextarea.css">
     <link rel="stylesheet" type="text/css" href="static/mips.css">
+    <style>
+      .hide {
+	  display: none;
+      }
+
+      .instruction_description_name:hover + .hide {
+	  display: block!important;
+	  color: red;
+      }
+      /* Tooltip container */
+      .mytooltip {
+	position: relative;
+	display: inline-block;
+      }
+
+      /* Tooltip text */
+      .mytooltip .mytooltiptext {
+	visibility: hidden;
+	width: 120px;
+	background-color: #555;
+	color: #fff;
+	text-align: center;
+	padding: 5px 0;
+	border-radius: 6px;
+
+	/* Position the tooltip text */
+	position: absolute;
+	z-index: 1;
+	bottom: 125%;
+	left: 50%;
+	margin-left: -60px;
+
+	/* Fade in tooltip */
+	opacity: 0;
+	transition: opacity 0.3s;
+      }
+
+      /* Tooltip arrow */
+      .mytooltip .mytooltiptext::after {
+	content: "";
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	margin-left: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: #555 transparent transparent transparent;
+      }
+
+      /* Show the tooltip text when you mouse over the tooltip container */
+      .mytooltip:hover .mytooltiptext {
+	visibility: visible;
+	opacity: 1;
+      }
+
+      #grid {
+	display: grid;
+	gap: 10px;
+	grid-template-columns: repeat(8, 1fr);
+	grid-auto-flow: row;
+      }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -21,7 +84,7 @@
         </div>
         <div class="row">
             <div class="col-md-6">
-                <p class="lead">Input your MIPS code here:</p>
+                <p class="lead">Input your RISC-V code here:</p>
                 <div class="form-group">
                     <textarea id="code" rows="15" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
                 </div>
@@ -67,15 +130,11 @@
                     <li><strong>A Delay slot is used for all jumps/branches. Branch offset addresses are relative to the delay slot instruction.</strong></li>
                 </ul>
                 <h4>Supported Instructions</h4>
-                <ul>
-                    <li>Immediate Arithmetic: <a href="mips_vol2.pdf#G12.997393"><code>ADDIU</code></a>, <a href="mips_vol2.pdf#G15.997393"><code>ANDI</code></a>, <a href="mips_vol2.pdf#G110.997393"><code>ORI</code></a>, <a href="mips_vol2.pdf#G160.997393"><code>XORI</code></a>, <a href="mips_vol2.pdf#G122.997393"><code>SLTI</code></a>, <a href="mips_vol2.pdf#G123.997876"><code>SLTIU</code></a></li>
-                    <li>Register Arithmetic: <a href="mips_vol2.pdf#G13.997413"><code>ADDU</code></a>, <a href="mips_vol2.pdf#G133.997413"><code>SUBU</code></a>, <a href="mips_vol2.pdf#G14.1000988"><code>AND</code></a>, <a href="mips_vol2.pdf#G109.997713"><code>OR</code></a>, <a href="mips_vol2.pdf#G159.997701"><code>XOR</code></a>, <a href="mips_vol2.pdf#G108.997719"><code>NOR</code></a>, <a href="mips_vol2.pdf#G121.997413"><code>SLT</code></a>, <a href="mips_vol2.pdf#G124.997413"><code>SLTU</code></a></li>
-                    <li>Move: <a href="mips_vol2.pdf#G89.997389"><code>MOVN</code></a>, <a href="mips_vol2.pdf#G93.997388"><code>MOVZ</code></a></li>
-                    <li>Shifts: <a href="mips_vol2.pdf#G119.997413"><code>SLL</code></a>, <a href="mips_vol2.pdf#G128.997413"><code>SRL</code></a>, <a href="mips_vol2.pdf#G126.997413"><code>SRA</code></a>, <a href="mips_vol2.pdf#G120.997413"><code>SLLV</code></a>, <a href="mips_vol2.pdf#G129.997413"><code>SRLV</code></a>, <a href="mips_vol2.pdf#G127.997413"><code>SRAV</code></a></li>
-                    <li>Immediate Load: <a href="mips_vol2.pdf#G73.997394"><code>LUI</code></a></li>
-                    <li>Control: <a href="mips_vol2.pdf#G62.997375"><code>J</code></a>, <a href="mips_vol2.pdf#G65.997706"><code>JR</code></a>, <a href="mips_vol2.pdf#G63.997375"><code>JAL</code></a>, <a href="mips_vol2.pdf#G64.997414"><code>JALR</code></a>, <a href="mips_vol2.pdf#G26.997393"><code>BEQ</code></a>, <a href="mips_vol2.pdf#G40.997393"><code>BNE</code></a>, <a href="mips_vol2.pdf#G34.997394"><code>BLEZ</code></a>, <a href="mips_vol2.pdf#G32.997394"><code>BGTZ</code></a>, <a href="mips_vol2.pdf#G36.997394"><code>BLTZ</code></a>, <a href="mips_vol2.pdf#G28.997394"><code>BGEZ</code></a></li>
-                    <li>Memory: <a href="mips_vol2.pdf#G74.997393"><code>LW</code></a>, <a href="mips_vol2.pdf#G66.997393"><code>LB</code></a>, <a href="mips_vol2.pdf#G67.997393"><code>LBU</code></a>, <a href="mips_vol2.pdf#G134.997393"><code>SW</code></a>, <a href="mips_vol2.pdf#G113.997393"><code>SB</code></a></li>
-                </ul>
+                <div id="grid">
+		  {% for instruction in instructions %}
+		  {{ macros::instruction_description(instruction=instruction) }}
+		  {% endfor %}
+		</div>
                 <p>MIPS Reference: <a href="mips_vol2.pdf">mips_vol2.pdf</a></p>
             </div>
             <div class="col-md-6">
@@ -91,38 +150,21 @@
                             </tr>
                         </thead>
                         <tbody id="registers">
-                            <tr><td>0</td><td>$0 ($zero)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$1 ($at)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$2 ($v0)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$3 ($v1)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$4 ($a0)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$5 ($a1)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$6 ($a2)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$7 ($a3)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$8 ($t0)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$9 ($t1)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$10 ($t2)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$11 ($t3)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$12 ($t4)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$13 ($t5)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$14 ($t6)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$15 ($t7)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$16 ($s0)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$17 ($s1)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$18 ($s2)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$19 ($s3)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$20 ($s4)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$21 ($s5)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$22 ($s6)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$23 ($s7)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$24 ($t8)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$25 ($t9)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$26 ($k0)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$27 ($k1)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$28 ($gp)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$29 ($sp)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$30 ($fp)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
-                            <tr><td><input class="init-value" type="text" value="0"></td><td>$31 ($ra)</td><td>0</td><td>0x00000000</td><td>0b00000000000000000000000000000000</td></tr>
+			  {% for register in registers %}
+                          <tr>
+			    <td>
+			      {% if loop.first %}
+			      0
+			      {% else %}
+			      <input class="init-value" type="text" value="0">
+			      {% endif %}
+			    </td>
+			    <td>{{register.primary_name}} ({{ register.secondary_names | join(sep=", ")}})</td>
+			    <td>0</td>
+			    <td>0x00000000</td>
+			    <td>0b00000000000000000000000000000000</td>
+			  </tr>
+			  {% endfor %}
                         </tbody>
                     </table>
                 </div>

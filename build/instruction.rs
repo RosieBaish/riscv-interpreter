@@ -13,8 +13,6 @@ pub struct Instruction {
   pub implementation: String,
 }
 
-const NUM_COLUMNS: usize = 5;
-
 impl Instruction {
   fn reg_or_imm(arg: &String) -> &'static str {
     if arg.eq(&"imm".to_string()) || arg.eq(&"offset".to_string()) {
@@ -94,12 +92,8 @@ impl Instruction {
     )
   }
 
-  pub fn parse(line: &str) -> Option<Instruction> {
-    let mut cols: Vec<&str> = line.split("|").collect();
-    cols = cols[1..].to_vec();
-    cols.pop();
-    assert_eq!(cols.len(), NUM_COLUMNS);
-    if let [m, e, s, d, i] = &cols[..] {
+  pub fn parse(cells: [&str; 5]) -> Option<Instruction> {
+    if let [m, e, s, d, i] = &cells[..] {
       let i_str = i.trim().replace("BITWISE_OR", "|");
       Some(Instruction {
         mnemonic: m.trim().to_string(),
@@ -109,7 +103,7 @@ impl Instruction {
         implementation: i_str,
       })
     } else {
-      println!("{}", line);
+      println!("{:?}", cells);
       None
     }
   }
