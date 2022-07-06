@@ -1,8 +1,10 @@
+use serde::Serialize;
+
 #[path = "../src/build_common.rs"]
 mod build_common;
 use build_common::*;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Instruction {
   pub mnemonic: String,
   pub expansion: String,

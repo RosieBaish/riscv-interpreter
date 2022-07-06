@@ -4,6 +4,7 @@ use std::io;
 use std::io::*;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use which;
 
 /// Write these bindings as source text to the given `Write`able.
 pub fn write<W: std::io::Write>(
@@ -27,16 +28,10 @@ fn rustfmt_path<'a>() -> io::Result<Cow<'a, PathBuf>> {
   if let Ok(rustfmt) = env::var("RUSTFMT") {
     return Ok(Cow::Owned(rustfmt.into()));
   }
-  #[cfg(feature = "which-rustfmt")]
   match which::which("rustfmt") {
     Ok(p) => Ok(Cow::Owned(p)),
     Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("{}", e))),
   }
-  #[cfg(not(feature = "which-rustfmt"))]
-  Err(io::Error::new(
-    io::ErrorKind::Other,
-    "which wasn't enabled, and no rustfmt binary specified",
-  ))
 }
 
 /// Checks if rustfmt_bindings is set and runs rustfmt on the string

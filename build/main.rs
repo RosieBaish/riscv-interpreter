@@ -3,10 +3,26 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
 use std::path::Path;
+use tera::{Context, Tera};
 
 mod instruction;
 use instruction::Instruction;
 mod rustfmt;
+
+fn create_html(instructions: &Vec<Instruction>) {
+  // Use globbing
+  let tera = Tera::new("templates/*.html").expect("Parsing error(s):");
+
+  let path = Path::new("./www/index.html");
+  let mut file = BufWriter::new(File::create(&path).unwrap());
+
+  let mut context = Context::new();
+  context.insert("instruction", &instructions);
+
+  tera
+    .render_to("index.html", &context, &mut file)
+    .expect("Rendering Error");
+}
 
 fn parse_org_table(org_table: &str) -> Vec<Instruction> {
   let mut lines: Vec<&str> = org_table.lines().collect();
@@ -36,7 +52,7 @@ fn main() -> std::io::Result<()> {
   let mut file = BufWriter::new(File::create(&path).unwrap());
 
   let mut instruction_map = phf_codegen::Map::new();
-  for instruction in instructions {
+  for instruction in &instructions {
     rustfmt::write(instruction.create_implementation_source(), &mut file)
       .unwrap();
     instruction_map
@@ -48,5 +64,8 @@ fn main() -> std::io::Result<()> {
     &mut file,
   )
   .unwrap();
+
+  create_html(&instructions);
+
   Ok(())
 }
