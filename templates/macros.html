@@ -1,0 +1,10 @@
+{% macro instruction_description(instruction) %}
+<div class="mytooltip">
+  <code>
+    {{instruction.mnemonic}}
+  </code>
+  <div class="mytooltiptext">
+    {{ instruction.syntax }}
+  </div>
+</div>
+{% endmacro input %}

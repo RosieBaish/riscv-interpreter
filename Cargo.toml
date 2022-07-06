@@ -3,14 +3,18 @@ name = "riscv-interpreter"
 version = "0.1.0"
 authors = ["Rosie Baish <rosie.baish@192-168.co.uk>"]
 edition = "2018"
-build = "build.rs"
+build = "build/main.rs"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["console_error_panic_hook"]
+
 [build-dependencies]
 phf_codegen = "0.10.0"
+tera = { version = "1", default-features = false }
+which = "4.0"
+serde = { version = "1.0", features = ["derive"] }
 
 [dependencies]
 wasm-bindgen = "0.2.63"
