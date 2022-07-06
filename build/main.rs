@@ -7,7 +7,7 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-#[path = "src/build_common.rs"]
+#[path = "../src/build_common.rs"]
 mod build_common;
 use build_common::*;
 

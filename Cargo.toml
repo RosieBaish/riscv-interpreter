@@ -3,7 +3,7 @@ name = "riscv-interpreter"
 version = "0.1.0"
 authors = ["Rosie Baish <rosie.baish@192-168.co.uk>"]
 edition = "2018"
-build = "build.rs"
+build = "build/main.rs"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
