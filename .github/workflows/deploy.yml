@@ -1,0 +1,37 @@
+name: Deploy to GitHub pages
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Node
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.3.0
+    - run: wasm-pack build
+    - run: npm install
+      working-directory: www
+    - run: npm build
+      working-directory: www
+    - run: cp -r static/ dist/
+      working-directory: www
+    - name: Init new repo in dist folder and commit generated files
+      run: |
+        cd www/dist
+        git init
+        git add -A
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git commit -m 'deploy'
+    - name: Force push to destination branch
+      uses: ad-m/github-push-action@v0.5.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: gh-pages
+        force: true
+        directory: ./www/dist
