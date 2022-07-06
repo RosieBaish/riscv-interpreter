@@ -44,10 +44,16 @@ impl Instruction {
       .collect()
   }
 
+  fn escaped_mnemonic(&self) -> String {
+    return self.mnemonic.replace(|c: char| !c.is_alphanumeric(), "_");
+  }
+
   fn create_implementation_source(&self) -> String {
     let mut impl_src = String::from(format!(
-      "#[allow(unused_variables)]\nfn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [u64; 32], &mut u64)> \n {{\n if let [",
-      self.mnemonic
+      "#[allow(unused_variables)]\n\
+       fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [u64; 32], &mut u64)> {{\n\
+       if let [",
+      self.escaped_mnemonic(),
     ));
     for arg in self.get_args() {
       impl_src.push_str(
@@ -61,17 +67,38 @@ impl Instruction {
     }
     impl_src.push_str(
       format!(
-        "] = args[..] \n{{ \n\tBox::new(move |x: &mut [u64; 32], pc: &mut u64| {{ {} }}) }} else {{ unreachable!(\"Wrong arg type\") }}\n}}\n\n",
+        "] = args[..] {{\n\
+         \tBox::new(move |x: &mut [u64; 32], pc: &mut u64| {{\n\
+         \t\t{}\n\
+         \t}})\n\
+         }} else {{\n\
+         \tunreachable!(\"Wrong arg type\") }}\n\
+         }}\n\n",
         self.implementation
       )
-        .as_str(),
+      .as_str(),
     );
     impl_src
   }
 
   fn as_source(&self) -> String {
     let syntax_str = "&[\"".to_string() + &self.syntax.join("\", \"") + "\"]";
-    format!("InstructionSource {{ mnemonic: \"{}\", expansion: \"{}\", syntax: {}, description: r#\"{}\"#, implementation_str: \"{}\", implementation: {} }}", self.mnemonic, self.expansion, syntax_str, self.description, self.implementation, self.mnemonic)
+    format!(
+      "InstructionSource {{\n\
+             mnemonic: \"{}\",\n\
+             expansion: \"{}\",\n\
+             syntax: {},\n\
+             description: r#\"{}\"#,\n\
+             implementation_str: \"{}\",\n\
+             implementation: {}\n\
+             }}",
+      self.mnemonic,
+      self.expansion,
+      syntax_str,
+      self.description,
+      self.implementation,
+      self.escaped_mnemonic()
+    )
   }
 }
 
