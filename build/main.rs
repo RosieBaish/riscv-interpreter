@@ -1,7 +1,6 @@
 use serde::Serialize;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
@@ -132,8 +131,17 @@ fn parse_org_table<'a, const NUM_COLUMNS: usize>(
 fn main() -> std::io::Result<()> {
   let (instructions, registers) = parse_org_file("rv64_i.org");
 
-  let path = Path::new(&env::var("OUT_DIR").unwrap()).join("codegen.rs");
+  let path = Path::new("src/codegen.rs");
   let mut file = BufWriter::new(File::create(&path).unwrap());
+
+  rustfmt::write(
+    "use crate::instruction::*;\n\
+     use crate::rv64_i::*;\n\
+     \n"
+      .to_string(),
+    &mut file,
+  )
+  .unwrap();
 
   let mut instruction_map = phf_codegen::Map::new();
   for instruction in &instructions {
@@ -143,7 +151,7 @@ fn main() -> std::io::Result<()> {
       .entry(instruction.mnemonic.clone(), &instruction.as_source());
   }
   rustfmt::write(
-    format!("#[allow(unused_must_use)]\nstatic INSTRUCTIONS: phf::Map<&'static str, InstructionSource> = {};\n",
+    format!("#[allow(unused_must_use)]\npub static INSTRUCTIONS: phf::Map<&'static str, InstructionSource> = {};\n",
     instruction_map.build()),
     &mut file,
   )
