@@ -14,11 +14,17 @@ pub struct Interpreter {
   #[wasm_bindgen(skip)]
   pub registers: [u64; 32],
   #[wasm_bindgen(skip)]
+  pub memory: [u8; crate::rv64_i::MEMORY_SIZE],
+  #[wasm_bindgen(skip)]
+  pub pc: PC,
+  #[wasm_bindgen(skip)]
   pub errors: Vec<String>,
   // Some(0) means single step
   // None means "as fast as possible"
   #[wasm_bindgen(skip)]
   pub frequency: Option<u32>,
+  #[wasm_bindgen(skip)]
+  pub running: bool,
 }
 
 impl Interpreter {

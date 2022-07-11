@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+pub const MEMORY_SIZE: usize = 4096;
 
 pub fn sext<const ARRLEN: usize>(input: [bool; ARRLEN]) -> u64 {
   let mut total: u64 = 0;
@@ -8,6 +8,7 @@ pub fn sext<const ARRLEN: usize>(input: [bool; ARRLEN]) -> u64 {
   for i in ARRLEN..64 {
     total |= (input[ARRLEN - 1] as u64) << i;
   }
+  log!("sext({:?}) = {}", input, total);
   total
 }
 
@@ -37,36 +38,26 @@ pub fn arith_r_shift(val: u64, offset: u64) -> u64 {
   u64::from_ne_bytes(shifted_s_val.to_ne_bytes())
 }
 
-const MEMORY_SIZE: usize = 1024;
-thread_local! {static MEMORY: RefCell<[u8; MEMORY_SIZE]> = RefCell::new([0; MEMORY_SIZE]);}
-
-pub fn mem_read(address: u64, length: u32) -> u64 {
+pub fn read(mem: &[u8; MEMORY_SIZE], address: u64, length: u32) -> u64 {
   assert!(length == 8 || length == 16 || length == 32 || length == 64);
-  assert!(address as usize + ((length / 8) as usize) < MEMORY_SIZE);
+  assert!(address as usize + ((length / 8) as usize) <= MEMORY_SIZE);
 
   let mut val: u64 = 0;
 
-  MEMORY.with(|m| {
-    let mem: [u8; MEMORY_SIZE] = *m.borrow();
-    for i in 0..(length / 8) {
-      val += (mem[address as usize] as u64) << (i * 8);
-    }
-  });
+  for i in 0..(length / 8) {
+    val += (mem[address as usize + i as usize] as u64) << (i * 8);
+  }
   val
 }
 
-pub fn mem_read_sext(address: u64, length: u32) -> u64 {
-  sext_n(mem_read(address, length), length)
+pub fn read_sext(mem: &[u8; MEMORY_SIZE], address: u64, length: u32) -> u64 {
+  sext_n(read(mem, address, length), length)
 }
 
-pub fn mem_write(address: u64, length: u32, val: u64) {
+pub fn write(mem: &mut [u8; MEMORY_SIZE], address: u64, length: u32, val: u64) {
   assert!(length == 8 || length == 16 || length == 32 || length == 64);
-  assert!(address as usize + ((length / 8) as usize) < MEMORY_SIZE);
-
-  MEMORY.with(|m| {
-    let mut mem: [u8; MEMORY_SIZE] = *m.borrow_mut();
-    for i in 0..(length / 8) {
-      mem[address as usize] = ((val >> (i * 8)) & 0xFF) as u8;
-    }
-  });
+  assert!(address as usize + ((length / 8) as usize) <= MEMORY_SIZE);
+  for i in 0..(length / 8) {
+    mem[address as usize + i as usize] = ((val >> (i * 8)) & 0xFF) as u8;
+  }
 }

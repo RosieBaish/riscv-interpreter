@@ -6,6 +6,7 @@ mod codegen;
 mod instruction;
 use instruction::ImplementationArg::*;
 use instruction::*;
+#[macro_use]
 mod interface;
 mod interpreter;
 mod registers;
@@ -38,6 +39,7 @@ impl<'a> InstructionSource {
   pub fn parse(&self, code: &str) -> Option<Vec<ImplementationArg>> {
     let tokens: Vec<String> = tokenise(code);
     if tokens.len() != self.syntax.len() {
+      log!("Wrong number of tokens");
       self.format_error(tokens);
       return None;
     }
@@ -47,13 +49,15 @@ impl<'a> InstructionSource {
       if expected.eq(&"rd") || expected.eq(&"rs1") || expected.eq(&"rs2") {
         let reg_num = registers::NAMES.get(actual);
         if reg_num.is_none() {
+          log!("Failed to get reg num");
           self.format_error(tokens);
           return None;
         }
         arguments.push(Register((*reg_num.unwrap()).try_into().unwrap()));
-      } else if expected.eq(&"imm") {
+      } else if expected.eq(&"imm") || expected.eq(&"offset") {
         let val = parse_imm::<12>(actual.to_string());
         if val.is_none() {
+          log!("Failed to get val");
           self.format_error(tokens);
           return None;
         }
@@ -61,6 +65,7 @@ impl<'a> InstructionSource {
       } else if expected.eq(&"imm20") {
         let val = parse_imm::<20>(actual.to_string());
         if val.is_none() {
+          log!("Failed to get val");
           self.format_error(tokens);
           return None;
         }
@@ -68,6 +73,7 @@ impl<'a> InstructionSource {
       } else if actual == expected {
         // If it matches, we're good
       } else {
+        log!("Nothing matched");
         self.format_error(tokens);
         return None;
       }
