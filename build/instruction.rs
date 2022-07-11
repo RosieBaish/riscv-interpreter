@@ -42,7 +42,7 @@ impl Instruction {
   pub fn create_implementation_source(&self) -> String {
     let mut impl_src = String::from(format!(
       "#[allow(unused_variables)]\n\
-       fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [u64; 32], &mut u64)> {{\n\
+       fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [u64; 32], &mut PC, &mut [u8; crate::rv64_i::MEMORY_SIZE])> {{\n\
        if let [",
       self.escaped_mnemonic(),
     ));
@@ -56,15 +56,25 @@ impl Instruction {
         .as_str(),
       );
     }
+    let mut log_string = String::from("\"");
+    for arg in self.get_args() {
+      log_string.push_str(format!("{}: {{:?}} ", arg).as_str());
+    }
+    log_string.push_str("\", ");
+    for arg in self.get_args() {
+      log_string.push_str(format!("{}, ", arg).as_str());
+    }
     impl_src.push_str(
       format!(
         "] = args[..] {{\n\
-         \tBox::new(move |x: &mut [u64; 32], pc: &mut u64| {{\n\
+         \tBox::new(move |x: &mut [u64; 32], pc: &mut PC, mem: &mut [u8; crate::rv64_i::MEMORY_SIZE]| {{\n\
+         crate::log!({});
          \t\t{}\n\
          \t}})\n\
          }} else {{\n\
          \tunreachable!(\"Wrong arg type\") }}\n\
          }}\n\n",
+        log_string,
         self.implementation
       )
       .as_str(),
