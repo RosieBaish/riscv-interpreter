@@ -21,7 +21,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 fn parse_imm<const ARRLEN: usize>(input: String) -> Option<[bool; ARRLEN]> {
   let mut bitvec: [bool; ARRLEN] = [false; ARRLEN];
-  let val: Option<i32> = input.parse::<i32>().ok();
+  let val: Option<i32> = parse_int::parse::<i32>(&input).ok();
   if val.is_none() {
     return None;
   }
@@ -70,6 +70,8 @@ impl<'a> InstructionSource {
           return None;
         }
         arguments.push(Imm20(val.unwrap()));
+      } else if expected.eq(&"shamt") {
+        arguments.push(Shamt(parse_int::parse::<u64>(actual).ok().unwrap()));
       } else if actual == expected {
         // If it matches, we're good
       } else {

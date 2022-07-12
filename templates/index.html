@@ -124,10 +124,13 @@
     <div class="page-header">
       <h1>RISC-V Interpreter</h1>
     </div>
-    <div id="warnings-container" class="alert alert-warning" style="display: none;"></div>
     <div id="errors-container" class="alert alert-danger" style="display: none;">
-      <p class="lead">OOPS! Your code ran, but there were errors...</p>
+      <p class="lead">OOPS! Your code failed to run due to errors:</p>
       <div id="errors"></div>
+    </div>
+    <div id="warnings-container" class="alert alert-warning" style="display: none;">
+      <p class="lead">Warning! Your code ran, but there were some issues:</p>
+      <div id="warnings"></div>
     </div>
     <div class="row">
       <div class="col-md-6">

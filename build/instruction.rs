@@ -42,7 +42,7 @@ impl Instruction {
   pub fn create_implementation_source(&self) -> String {
     let mut impl_src = String::from(format!(
       "#[allow(unused_variables)]\n\
-       fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [u64; 32], &mut PC, &mut [u8; crate::rv64_i::MEMORY_SIZE])> {{\n\
+       fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [Register; 32], &mut PC, &mut [u8; crate::rv64_i::MEMORY_SIZE])> {{\n\
        if let [",
       self.escaped_mnemonic(),
     ));
@@ -67,7 +67,7 @@ impl Instruction {
     impl_src.push_str(
       format!(
         "] = args[..] {{\n\
-         \tBox::new(move |x: &mut [u64; 32], pc: &mut PC, mem: &mut [u8; crate::rv64_i::MEMORY_SIZE]| {{\n\
+         \tBox::new(move |x: &mut [Register; 32], pc: &mut PC, mem: &mut [u8; crate::rv64_i::MEMORY_SIZE]| {{\n\
          crate::log!({});
          \t\t{}\n\
          \t}})\n\
