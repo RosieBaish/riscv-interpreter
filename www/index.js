@@ -3,7 +3,6 @@ import { Interpreter } from "riscv-interpreter";
 "use strict";
 
 const interpreter = Interpreter.new()
-interpreter.update_ui();
 
 document.getElementById('memory-go').onclick = () => interpreter.update_ui();
 document.getElementById("run").onclick = () => interpreter.run_button();
@@ -21,14 +20,18 @@ if (typeof(Storage) !== "undefined") {
     localStorage.setItem("code", document.getElementById('code').value);
   };
 }
+
 $('#code').linedtextarea();
 $('.codelines').on('click', '.lineno', function() {
-  $(this).toggleClass('lineselect');
+  interpreter.toggle_breakpoint($(this).html());
 });
 $('#code').bind('input propertychange', function() { // if the code changes, invalidate the current program instance
   stop();
   document.getElementById('recent-instruction').innerHTML = "<br>Execution automatically stopped because of code change."
+  interpreter.update_if_necessary();
 });
+
+interpreter.start();
 
 function setFrequency(freq) {
   if (typeof freq === 'string' && freq == "unlimited") {

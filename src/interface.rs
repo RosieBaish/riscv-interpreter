@@ -34,12 +34,11 @@ impl Interpreter {
       warnings: Vec::new(),
       frequency: Some(0),
       running: false,
-      started: false,
     };
     interpreter
   }
 
-  fn update_if_necessary(&mut self) {
+  pub fn update_if_necessary(&mut self) {
     let c: String = self.get_code();
     if c.ne(&self.code) {
       self.code = c;
@@ -183,6 +182,8 @@ impl Interpreter {
     self.set_id_visibility("errors-container", self.errors.len() > 0);
     self.set_inner_html("warnings", &self.warnings.join("<br>"));
     self.set_id_visibility("warnings-container", self.warnings.len() > 0);
+
+    self.set_breakpoints_and_current_line();
   }
 
   pub fn run_button(&mut self) {
@@ -276,17 +277,111 @@ impl Interpreter {
       .set_inner_html(html);
   }
 
-  fn start(&mut self) {
+  fn add_class_if_missing(&self, element: &web_sys::HtmlElement, class: &str) {
+    let classes: web_sys::DomTokenList = element.class_list();
+    if !classes.contains(class) {
+      classes.add_1(class).ok();
+    }
+  }
+
+  fn remove_class_if_present(
+    &self,
+    element: &web_sys::HtmlElement,
+    class: &str,
+  ) {
+    let classes: web_sys::DomTokenList = element.class_list();
+    if classes.contains(class) {
+      classes.remove_1(class).ok();
+    }
+  }
+
+  fn set_breakpoints_and_current_line(&self) {
+    let window = web_sys::window().expect("global window does not exists");
+    let document = window.document().expect("expecting a document on window");
+    let lines_elements: web_sys::HtmlCollection =
+      document.get_elements_by_class_name("codelines");
+    // It's dynamically initialised so may be missing on startup
+    if lines_elements.length() == 0 {
+      return;
+    }
+    assert_eq!(lines_elements.length(), 1);
+
+    let max_line_num = self
+      .instructions
+      .iter()
+      .map(|i| i.line_num)
+      .max()
+      .unwrap_or(0);
+
+    let lines_element = lines_elements.item(0).unwrap();
+    log!("{}, {}", lines_element.child_element_count(), max_line_num);
+    if lines_element.child_element_count() < max_line_num {
+      return;
+    }
+
+    let lines: web_sys::HtmlCollection = lines_element.children();
+
+    assert!(lines.length() > max_line_num);
+    // Have to create and then set, because of blank lines
+    let mut is_break: Vec<bool> = Vec::with_capacity(max_line_num as usize);
+    for _i in 0..lines.length() {
+      is_break.push(false);
+    }
+    for instruction in &self.instructions {
+      is_break[(instruction.line_num - 1/* 1 indexed */) as usize] =
+        instruction.breakpoint;
+    }
+
+    for line_num in 0..lines.length() {
+      let line = lines
+        .item(line_num)
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap();
+      self.remove_class_if_present(&line, "lineselect");
+      if is_break[line_num as usize] {
+        line
+          // Unicode big red dot
+          .set_inner_html(format!("🔴 {}", line_num + 1).as_str());
+      } else {
+        line.set_inner_html(format!("{}", line_num + 1).as_str());
+      }
+    }
+    let pc_line_num = (self.pc.get().value / 4) as usize;
+    if pc_line_num < self.instructions.len() {
+      let next_inst_line = lines
+        .item(
+          self.instructions[pc_line_num].line_num - 1, /* 1 indexed */
+        )
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap();
+      self.add_class_if_missing(&next_inst_line, "lineselect");
+    }
+  }
+
+  pub fn toggle_breakpoint(&mut self, line_num: &str) {
+    log!("toggle_breakpoint({})", line_num);
+    let ln =
+      parse_int::parse::<u32>(line_num.trim_matches(|c| !char::is_numeric(c)))
+        .unwrap();
+
+    for mut instruction in self.instructions.iter_mut() {
+      if instruction.line_num == ln {
+        instruction.breakpoint = !instruction.breakpoint;
+        log!("{:?}", instruction);
+      }
+    }
+    self.set_breakpoints_and_current_line();
+  }
+
+  pub fn start(&mut self) {
     self.update_if_necessary();
     self.get_initial_registers();
-    self.started = true;
-    self.update_ui()
+    self.update_ui();
   }
 
   fn run(&mut self) {
-    if !self.started {
-      self.start();
-    }
     self.running = true;
     // 4 bytes/instruction
     let max_pc: u64 = self.instructions.len() as u64 * 4;
@@ -297,9 +392,6 @@ impl Interpreter {
   }
 
   fn step(&mut self) {
-    if !self.started {
-      self.start();
-    }
     log!("{:?}; {}", self.registers, self.pc.get().value);
     self.pc.changed = false;
     let inst = &self.instructions[(self.pc.get().value / 4) as usize];
@@ -318,5 +410,6 @@ impl Interpreter {
   pub fn reset(&mut self) {
     self.stop();
     *self = Interpreter::new();
+    self.start();
   }
 }

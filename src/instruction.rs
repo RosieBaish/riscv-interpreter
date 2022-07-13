@@ -256,7 +256,8 @@ impl fmt::Debug for InstructionSource {
 #[allow(dead_code)] // TODO - connect source and line_num to front end.
 pub struct Instruction {
   pub source: &'static InstructionSource,
-  pub line_num: u32,
+  pub line_num: u32, // 1 indexed
+  pub breakpoint: bool,
   pub implementation:
     Box<dyn Fn(&mut [Register; 32], &mut PC, &mut [u8; MEMORY_SIZE])>,
 }
@@ -266,6 +267,7 @@ impl fmt::Debug for Instruction {
     f.debug_struct("Instruction")
       .field("source", &self.source)
       .field("line_num", &self.line_num)
+      .field("breakpoint", &self.breakpoint)
       .finish()
   }
 }

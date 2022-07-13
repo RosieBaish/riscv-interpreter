@@ -27,8 +27,6 @@ pub struct Interpreter {
   pub frequency: Option<u32>,
   #[wasm_bindgen(skip)]
   pub running: bool,
-  #[wasm_bindgen(skip)]
-  pub started: bool,
 }
 
 impl Interpreter {
@@ -58,6 +56,7 @@ impl Interpreter {
       let actual_instruction = Instruction {
         source: inst,
         line_num: line_num,
+        breakpoint: false,
         implementation: impl_func,
       };
       self.instructions.push(actual_instruction);
