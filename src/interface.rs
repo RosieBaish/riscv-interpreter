@@ -1,3 +1,4 @@
+use crate::instruction::*;
 use crate::interpreter::*;
 use crate::rv64_i::MEMORY_SIZE;
 use crate::utils;
@@ -26,18 +27,18 @@ impl Interpreter {
     let interpreter = Interpreter {
       code: "".to_string(),
       instructions: Vec::new(),
-      registers: [0; 32],
+      registers: [Register { value: 0 }; 32],
       memory: [0; MEMORY_SIZE],
       pc: PC::new(),
       errors: Vec::new(),
+      warnings: Vec::new(),
       frequency: Some(0),
       running: false,
     };
-    interpreter.update_memory();
     interpreter
   }
 
-  fn update_if_necessary(&mut self) {
+  pub fn update_if_necessary(&mut self) {
     let c: String = self.get_code();
     if c.ne(&self.code) {
       self.code = c;
@@ -57,7 +58,7 @@ impl Interpreter {
   }
 
   fn get_initial_registers(&mut self) {
-    self.registers[0] = 0;
+    self.registers[0] = Register { value: 0 };
     let window = web_sys::window().expect("global window does not exists");
     let document = window.document().expect("expecting a document on window");
     let registers: web_sys::HtmlCollection = document
@@ -72,33 +73,27 @@ impl Interpreter {
         .unwrap()
         .value();
       log!("{}: {}\n", i, init_string);
-      self.registers[i] = parse_int::parse::<u64>(&init_string).unwrap();
+      self.registers[i] = Register {
+        value: parse_int::parse::<u64>(&init_string).unwrap(),
+      };
     }
   }
 
   fn update_registers(&self) {
-    assert_eq!(self.registers[0], 0);
-    let window = web_sys::window().expect("global window does not exists");
-    let document = window.document().expect("expecting a document on window");
+    assert_eq!(self.registers[0].value, 0);
     for i in 1..32 {
-      document
-        .get_element_by_id(format!("register_{}_decimal", i).as_str())
-        .unwrap()
-        .dyn_into::<web_sys::HtmlElement>()
-        .unwrap()
-        .set_inner_text(format!("{}", self.registers[i]).as_str());
-      document
-        .get_element_by_id(format!("register_{}_hex", i).as_str())
-        .unwrap()
-        .dyn_into::<web_sys::HtmlElement>()
-        .unwrap()
-        .set_inner_text(format!("0x{:016X}", self.registers[i]).as_str());
-      document
-        .get_element_by_id(format!("register_{}_binary", i).as_str())
-        .unwrap()
-        .dyn_into::<web_sys::HtmlElement>()
-        .unwrap()
-        .set_inner_text(format!("0b{:064b}", self.registers[i]).as_str());
+      self.set_inner_html(
+        format!("register_{}_decimal", i).as_str(),
+        format!("{}", self.registers[i]).as_str(),
+      );
+      self.set_inner_html(
+        format!("register_{}_hex", i).as_str(),
+        format!("0x{:016X}", self.registers[i]).as_str(),
+      );
+      self.set_inner_html(
+        format!("register_{}_binary", i).as_str(),
+        format!("0b{:064b}", self.registers[i]).as_str(),
+      );
     }
   }
 
@@ -126,8 +121,8 @@ impl Interpreter {
       start = 0;
     }
     let mut end = start + (NUM_ROWS * BYTES_PER_ROW);
-    if end > 0x8000000 {
-      end = 0x8000000;
+    if end > MEMORY_SIZE as u32 {
+      end = MEMORY_SIZE as u32;
       start = end - (NUM_ROWS * BYTES_PER_ROW)
     }
 
@@ -174,63 +169,247 @@ impl Interpreter {
     }
   }
 
-  fn start(&mut self) {
-    self.update_if_necessary();
-    self.get_initial_registers();
-    self.running = true;
+  pub fn update_ui(&self) {
+    self.update_registers();
+    self.update_memory();
+
+    self.set_parent_visibility("reset", true);
+    self.set_parent_visibility("step", !self.running);
+    self.set_parent_visibility("run", !self.running);
+    self.set_parent_visibility("stop", self.running);
+
+    self.set_inner_html("errors", &self.errors.join("<br>"));
+    self.set_id_visibility("errors-container", self.errors.len() > 0);
+    self.set_inner_html("warnings", &self.warnings.join("<br>"));
+    self.set_id_visibility("warnings-container", self.warnings.len() > 0);
+
+    self.set_breakpoints_and_current_line();
   }
 
   pub fn run_button(&mut self) {
-    if !self.running {
-      self.start();
-    }
-    // 4 bytes/instruction
-    let max_pc: u64 = self.instructions.len() as u64 * 4;
-    while self.pc.get() < max_pc {
-      self.step();
-    }
-    self.running = false;
-  }
-
-  fn step(&mut self) {
-    log!("{:?}; {}", self.registers, self.pc.get());
-    self.pc.changed = false;
-    let inst = &self.instructions[(self.pc.get() / 4) as usize];
-    log!("{:?}", inst);
-    (inst.implementation)(&mut self.registers, &mut self.pc, &mut self.memory);
-    if !self.pc.changed {
-      self.pc.inc(4);
-    }
-    self.registers[0] = 0;
+    self.run();
+    self.update_ui();
   }
 
   pub fn step_button(&mut self) {
-    if !self.running {
-      self.start();
-    }
+    self.running = true;
+    self.update_ui();
     self.step();
-    self.update_registers();
-    self.update_memory();
+    self.running = false;
+    self.update_ui();
   }
 
-  pub fn reset_button(&self) {
-    //    parse("hello".to_string());
-    //    alert("Reset");
+  pub fn reset_button(&mut self) {
+    self.reset();
+    self.set_inner_html(
+      "recent-instruction",
+      "The most recent instructions will be shown here when stepping.",
+    );
+    self.update_ui();
   }
 
-  pub fn stop_button(&self) {
-    //    alert("Stop");
+  pub fn stop_button(&mut self) {
+    self.stop();
+    self.update_ui();
   }
 
   pub fn get_errors(&self) -> *const String {
     self.errors.as_ptr()
   }
 
-  pub fn set_freqency(&mut self, unlimited: bool, freq: u32) {
+  pub fn set_freqency_button(&mut self, unlimited: bool, freq: u32) {
     if unlimited {
       self.frequency = None;
+      self.set_inner_html(
+        "freq",
+        "CPU: Unrestricted <span class=\"caret\"></span>",
+      );
     } else {
       self.frequency = Some(freq);
+      self.set_inner_html(
+        "freq",
+        &format!("CPU: {} Hz <span class=\"caret\"></span>", freq).as_str(),
+      );
     }
+  }
+
+  fn set_parent_visibility(&self, id: &str, visible: bool) {
+    //log!("set_parent_visibility({}, {})", id, visible);
+    let window = web_sys::window().expect("global window does not exists");
+    let document = window.document().expect("expecting a document on window");
+    let display_str = if visible { "" } else { "none" };
+    document
+      .get_element_by_id(id)
+      .unwrap() // De-optionify
+      .parent_element()
+      .unwrap() // De-optionify
+      .dyn_into::<web_sys::HtmlElement>()
+      .unwrap()
+      .style()
+      .set_property("display", display_str)
+      .expect("able to change element");
+  }
+
+  fn set_id_visibility(&self, id: &str, visible: bool) {
+    //log!("set_id_visibility({}, {})", id, visible);
+    let window = web_sys::window().expect("global window does not exists");
+    let document = window.document().expect("expecting a document on window");
+    let display_str = if visible { "" } else { "none" };
+    document
+      .get_element_by_id(id)
+      .unwrap() // De-optionify
+      .dyn_into::<web_sys::HtmlElement>()
+      .unwrap()
+      .style()
+      .set_property("display", display_str)
+      .expect("able to change element");
+  }
+
+  fn set_inner_html(&self, id: &str, html: &str) {
+    let window = web_sys::window().expect("global window does not exists");
+    let document = window.document().expect("expecting a document on window");
+    //log!("set_inner_html({}, {})", id, html);
+    document
+      .get_element_by_id(id)
+      .unwrap() // De-optionify
+      .dyn_into::<web_sys::HtmlElement>()
+      .unwrap()
+      .set_inner_html(html);
+  }
+
+  fn add_class_if_missing(&self, element: &web_sys::HtmlElement, class: &str) {
+    let classes: web_sys::DomTokenList = element.class_list();
+    if !classes.contains(class) {
+      classes.add_1(class).ok();
+    }
+  }
+
+  fn remove_class_if_present(
+    &self,
+    element: &web_sys::HtmlElement,
+    class: &str,
+  ) {
+    let classes: web_sys::DomTokenList = element.class_list();
+    if classes.contains(class) {
+      classes.remove_1(class).ok();
+    }
+  }
+
+  fn set_breakpoints_and_current_line(&self) {
+    let window = web_sys::window().expect("global window does not exists");
+    let document = window.document().expect("expecting a document on window");
+    let lines_elements: web_sys::HtmlCollection =
+      document.get_elements_by_class_name("codelines");
+    // It's dynamically initialised so may be missing on startup
+    if lines_elements.length() == 0 {
+      return;
+    }
+    assert_eq!(lines_elements.length(), 1);
+
+    let max_line_num = self
+      .instructions
+      .iter()
+      .map(|i| i.line_num)
+      .max()
+      .unwrap_or(0);
+
+    let lines_element = lines_elements.item(0).unwrap();
+    log!("{}, {}", lines_element.child_element_count(), max_line_num);
+    if lines_element.child_element_count() < max_line_num {
+      return;
+    }
+
+    let lines: web_sys::HtmlCollection = lines_element.children();
+
+    assert!(lines.length() > max_line_num);
+    // Have to create and then set, because of blank lines
+    let mut is_break: Vec<bool> = Vec::with_capacity(max_line_num as usize);
+    for _i in 0..lines.length() {
+      is_break.push(false);
+    }
+    for instruction in &self.instructions {
+      is_break[(instruction.line_num - 1/* 1 indexed */) as usize] =
+        instruction.breakpoint;
+    }
+
+    for line_num in 0..lines.length() {
+      let line = lines
+        .item(line_num)
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap();
+      self.remove_class_if_present(&line, "lineselect");
+      if is_break[line_num as usize] {
+        line
+          // Unicode big red dot
+          .set_inner_html(format!("🔴 {}", line_num + 1).as_str());
+      } else {
+        line.set_inner_html(format!("{}", line_num + 1).as_str());
+      }
+    }
+    let pc_line_num = (self.pc.get().value / 4) as usize;
+    if pc_line_num < self.instructions.len() {
+      let next_inst_line = lines
+        .item(
+          self.instructions[pc_line_num].line_num - 1, /* 1 indexed */
+        )
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap();
+      self.add_class_if_missing(&next_inst_line, "lineselect");
+    }
+  }
+
+  pub fn toggle_breakpoint(&mut self, line_num: &str) {
+    log!("toggle_breakpoint({})", line_num);
+    let ln =
+      parse_int::parse::<u32>(line_num.trim_matches(|c| !char::is_numeric(c)))
+        .unwrap();
+
+    for mut instruction in self.instructions.iter_mut() {
+      if instruction.line_num == ln {
+        instruction.breakpoint = !instruction.breakpoint;
+        log!("{:?}", instruction);
+      }
+    }
+    self.set_breakpoints_and_current_line();
+  }
+
+  pub fn start(&mut self) {
+    self.update_if_necessary();
+    self.get_initial_registers();
+    self.update_ui();
+  }
+
+  fn run(&mut self) {
+    self.running = true;
+    // 4 bytes/instruction
+    let max_pc: u64 = self.instructions.len() as u64 * 4;
+    while self.pc.get().value < max_pc {
+      self.step();
+    }
+    self.running = false;
+  }
+
+  fn step(&mut self) {
+    log!("{:?}; {}", self.registers, self.pc.get().value);
+    self.pc.changed = false;
+    let inst = &self.instructions[(self.pc.get().value / 4) as usize];
+    log!("{:?}", inst);
+    (inst.implementation)(&mut self.registers, &mut self.pc, &mut self.memory);
+    if !self.pc.changed {
+      self.pc.inc(Register { value: 4 });
+    }
+    self.registers[0] = Register { value: 0 };
+  }
+
+  fn stop(&mut self) {
+    self.running = false;
+  }
+
+  pub fn reset(&mut self) {
+    self.stop();
+    *self = Interpreter::new();
+    self.start();
   }
 }

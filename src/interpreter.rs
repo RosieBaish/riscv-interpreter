@@ -12,13 +12,15 @@ pub struct Interpreter {
   #[wasm_bindgen(skip)]
   pub instructions: Vec<Instruction>,
   #[wasm_bindgen(skip)]
-  pub registers: [u64; 32],
+  pub registers: [Register; 32],
   #[wasm_bindgen(skip)]
   pub memory: [u8; crate::rv64_i::MEMORY_SIZE],
   #[wasm_bindgen(skip)]
   pub pc: PC,
   #[wasm_bindgen(skip)]
   pub errors: Vec<String>,
+  #[wasm_bindgen(skip)]
+  pub warnings: Vec<String>,
   // Some(0) means single step
   // None means "as fast as possible"
   #[wasm_bindgen(skip)]
@@ -54,6 +56,7 @@ impl Interpreter {
       let actual_instruction = Instruction {
         source: inst,
         line_num: line_num,
+        breakpoint: false,
         implementation: impl_func,
       };
       self.instructions.push(actual_instruction);
