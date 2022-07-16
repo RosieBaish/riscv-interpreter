@@ -426,38 +426,3 @@ impl WebInterface {
     self.update_ui();
   }
 }
-impl Interpreter {
-  fn run(&mut self) {
-    self.running = true;
-    // 4 bytes/instruction
-    let max_pc: u64 = self.instructions.len() as u64 * 4;
-    while self.pc.get().value < max_pc {
-      self.step();
-    }
-    self.running = false;
-  }
-
-  fn step(&mut self) {
-    log!("{:?}; {}", self.registers, self.pc.get().value);
-    self.pc.changed = false;
-    let inst = &self.instructions[(self.pc.get().value / 4) as usize];
-    log!("{:?}", inst);
-    (inst.implementation)(&mut self.registers, &mut self.pc, &mut self.memory);
-    if !self.pc.changed {
-      self.pc.inc(Register { value: 4 });
-    }
-    self.registers[0] = Register { value: 0 };
-  }
-
-  fn stop(&mut self) {
-    self.running = false;
-  }
-  /*
-   * Commented out because this is now totally wrong
-   * pub fn reset(&mut self) {
-   *   self.stop();
-   *   *self = Interpreter::new();
-   *   self.start();
-   * }
-   */
-}

@@ -1,31 +1,19 @@
 use std::convert::TryInto;
 
-use wasm_bindgen::prelude::*;
-
 use crate::codegen::INSTRUCTIONS;
 use crate::instruction::*;
 
-#[wasm_bindgen]
 pub struct Interpreter {
-  #[wasm_bindgen(skip)]
   pub code: String,
-  #[wasm_bindgen(skip)]
   pub instructions: Vec<Instruction>,
-  #[wasm_bindgen(skip)]
   pub registers: [Register; 32],
-  #[wasm_bindgen(skip)]
   pub memory: [u8; crate::rv64_i::MEMORY_SIZE],
-  #[wasm_bindgen(skip)]
   pub pc: PC,
-  #[wasm_bindgen(skip)]
   pub errors: Vec<String>,
-  #[wasm_bindgen(skip)]
   pub warnings: Vec<String>,
   // Some(0) means single step
   // None means "as fast as possible"
-  #[wasm_bindgen(skip)]
   pub frequency: Option<u32>,
-  #[wasm_bindgen(skip)]
   pub running: bool,
 }
 
@@ -62,4 +50,38 @@ impl Interpreter {
       self.instructions.push(actual_instruction);
     }
   }
+
+  pub fn run(&mut self) {
+    self.running = true;
+    // 4 bytes/instruction
+    let max_pc: u64 = self.instructions.len() as u64 * 4;
+    while self.pc.get().value < max_pc {
+      self.step();
+    }
+    self.running = false;
+  }
+
+  pub fn step(&mut self) {
+    log!("{:?}; {}", self.registers, self.pc.get().value);
+    self.pc.changed = false;
+    let inst = &self.instructions[(self.pc.get().value / 4) as usize];
+    log!("{:?}", inst);
+    (inst.implementation)(&mut self.registers, &mut self.pc, &mut self.memory);
+    if !self.pc.changed {
+      self.pc.inc(Register { value: 4 });
+    }
+    self.registers[0] = Register { value: 0 };
+  }
+
+  pub fn stop(&mut self) {
+    self.running = false;
+  }
+  /*
+   * Commented out because this is now totally wrong
+   * pub fn reset(&mut self) {
+   *   self.stop();
+   *   *self = Interpreter::new();
+   *   self.start();
+   * }
+   */
 }
