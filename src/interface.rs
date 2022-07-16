@@ -49,7 +49,7 @@ macro_rules! function {
 #[macro_export]
 macro_rules! log {
     ($($tts:tt)*) => {
-      crate::log_inner!("{}: {}", crate::function!(), format!($($tts)*));
+      crate::log_inner!("{}:{} - {}", crate::function!(), std::line!(), format!($($tts)*));
     }
 }
 
@@ -360,8 +360,18 @@ impl WebInterface {
 
     let lines_element = lines_elements.item(0).unwrap();
     log!("{}, {}", lines_element.child_element_count(), max_line_num);
-    if lines_element.child_element_count() < max_line_num {
-      return;
+    for i in lines_element.child_element_count()..max_line_num + 1 {
+      log!("{}, {}", lines_element.child_element_count(), max_line_num);
+      let new_div =
+        document.create_element("div").expect("Couldn't create div");
+      new_div
+        .class_list()
+        .add_1("lineno")
+        .expect("Couldn't add class");
+      new_div.set_inner_html(&i.to_string());
+      lines_element
+        .append_with_node_1(&new_div)
+        .expect("failed to append new element");
     }
 
     let lines: web_sys::HtmlCollection = lines_element.children();
