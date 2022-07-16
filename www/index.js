@@ -25,8 +25,9 @@ $('#code').linedtextarea();
 $('.codelines').on('click', '.lineno', function() {
   interpreter.toggle_breakpoint($(this).html());
 });
+
 $('#code').bind('input propertychange', function() { // if the code changes, invalidate the current program instance
-  stop();
+  interpreter.code_change();
   document.getElementById('recent-instruction').innerHTML = "<br>Execution automatically stopped because of code change."
   interpreter.update_if_necessary();
 });

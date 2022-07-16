@@ -15,6 +15,7 @@ extern "C" {
 #[wasm_bindgen]
 pub struct WebInterface {
   interpreter: Interpreter,
+  code_changed: bool,
 }
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -70,18 +71,11 @@ impl WebInterface {
     };
     WebInterface {
       interpreter: interpreter,
+      code_changed: false,
     }
   }
 
-  pub fn update_if_necessary(&mut self) {
-    let c: String = self.get_code();
-    if c.ne(&self.interpreter.code) {
-      self.interpreter.code = c;
-      self.interpreter.parse();
-    }
-  }
-
-  fn get_code(&self) -> String {
+  fn update_code(&mut self) {
     let window = web_sys::window().expect("global window does not exists");
     let document = window.document().expect("expecting a document on window");
     let code_text = document
@@ -89,7 +83,18 @@ impl WebInterface {
       .unwrap() // De-optionify
       .dyn_into::<web_sys::HtmlTextAreaElement>() // Cast
       .unwrap(); // Unwrap the cast result
-    return code_text.value();
+    let code: String = self.value();
+    if code.ne(&self.interpreter.code) {
+      self.interpreter.code = code;
+      self.interpreter.parse();
+    }
+  }
+
+  pub fn code_change(&mut self) {
+    if self.interpreter.running {
+      self.interpreter.stop();
+    }
+    self.code_changed = true;
   }
 
   fn get_initial_registers(&mut self) {
@@ -228,11 +233,19 @@ impl WebInterface {
   }
 
   pub fn run_button(&mut self) {
+    if self.code_changed {
+      self.update_code();
+      self.code_changed = false;
+    }
     self.interpreter.run();
     self.update_ui();
   }
 
   pub fn step_button(&mut self) {
+    if self.code_changed {
+      self.update_code();
+      self.code_changed = false;
+    }
     self.interpreter.running = true;
     self.update_ui();
     self.interpreter.step();
