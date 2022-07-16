@@ -1,8 +1,8 @@
-import { Interpreter } from "riscv-interpreter";
+import { WebInterface } from "riscv-interpreter";
 
 "use strict";
 
-const interpreter = Interpreter.new()
+const interpreter = WebInterface.new()
 
 document.getElementById('memory-go').onclick = () => interpreter.update_ui();
 document.getElementById("run").onclick = () => interpreter.run_button();
