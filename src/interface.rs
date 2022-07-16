@@ -12,6 +12,11 @@ extern "C" {
   pub fn alert(s: &str);
 }
 
+#[wasm_bindgen]
+pub struct WebInterface {
+  interpreter: Interpreter,
+}
+
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
 #[cfg(target_family = "wasm")]
 #[macro_export]
@@ -49,8 +54,8 @@ macro_rules! log {
 }
 
 #[wasm_bindgen]
-impl Interpreter {
-  pub fn new() -> Interpreter {
+impl WebInterface {
+  pub fn new() -> WebInterface {
     utils::set_panic_hook();
     let interpreter = Interpreter {
       code: "".to_string(),
@@ -63,14 +68,16 @@ impl Interpreter {
       frequency: Some(0),
       running: false,
     };
-    interpreter
+    WebInterface {
+      interpreter: interpreter,
+    }
   }
 
   pub fn update_if_necessary(&mut self) {
     let c: String = self.get_code();
-    if c.ne(&self.code) {
-      self.code = c;
-      self.parse();
+    if c.ne(&self.interpreter.code) {
+      self.interpreter.code = c;
+      self.interpreter.parse();
     }
   }
 
@@ -86,7 +93,7 @@ impl Interpreter {
   }
 
   fn get_initial_registers(&mut self) {
-    self.registers[0] = Register { value: 0 };
+    self.interpreter.registers[0] = Register { value: 0 };
     let window = web_sys::window().expect("global window does not exists");
     let document = window.document().expect("expecting a document on window");
     let registers: web_sys::HtmlCollection = document
@@ -101,26 +108,26 @@ impl Interpreter {
         .unwrap()
         .value();
       log!("{}: {}\n", i, init_string);
-      self.registers[i] = Register {
+      self.interpreter.registers[i] = Register {
         value: parse_int::parse::<u64>(&init_string).unwrap(),
       };
     }
   }
 
   fn update_registers(&self) {
-    assert_eq!(self.registers[0].value, 0);
+    assert_eq!(self.interpreter.registers[0].value, 0);
     for i in 1..32 {
       self.set_inner_html(
         format!("register_{}_decimal", i).as_str(),
-        format!("{}", self.registers[i]).as_str(),
+        format!("{}", self.interpreter.registers[i]).as_str(),
       );
       self.set_inner_html(
         format!("register_{}_hex", i).as_str(),
-        format!("0x{:016X}", self.registers[i]).as_str(),
+        format!("0x{:016X}", self.interpreter.registers[i]).as_str(),
       );
       self.set_inner_html(
         format!("register_{}_binary", i).as_str(),
-        format!("0b{:064b}", self.registers[i]).as_str(),
+        format!("0b{:064b}", self.interpreter.registers[i]).as_str(),
       );
     }
   }
@@ -158,10 +165,12 @@ impl Interpreter {
     for row_start in (start..end).step_by(BYTES_PER_ROW as usize) {
       memory_table.push_str(&format!("<td>0x{:08x}</td>", row_start));
       for byte in row_start..(row_start + BYTES_PER_ROW) {
-        memory_table
-          .push_str(&format!("<td>{:02x}</td>", self.memory[byte as usize]));
+        memory_table.push_str(&format!(
+          "<td>{:02x}</td>",
+          self.interpreter.memory[byte as usize]
+        ));
       }
-      let build_string_vec: Vec<String> = self.memory
+      let build_string_vec: Vec<String> = self.interpreter.memory
         [row_start as usize..(row_start + BYTES_PER_ROW) as usize]
         .iter()
         .map(|num| {
@@ -202,58 +211,65 @@ impl Interpreter {
     self.update_memory();
 
     self.set_parent_visibility("reset", true);
-    self.set_parent_visibility("step", !self.running);
-    self.set_parent_visibility("run", !self.running);
-    self.set_parent_visibility("stop", self.running);
+    self.set_parent_visibility("step", !self.interpreter.running);
+    self.set_parent_visibility("run", !self.interpreter.running);
+    self.set_parent_visibility("stop", self.interpreter.running);
 
-    self.set_inner_html("errors", &self.errors.join("<br>"));
-    self.set_id_visibility("errors-container", self.errors.len() > 0);
-    self.set_inner_html("warnings", &self.warnings.join("<br>"));
-    self.set_id_visibility("warnings-container", self.warnings.len() > 0);
+    self.set_inner_html("errors", &self.interpreter.errors.join("<br>"));
+    self
+      .set_id_visibility("errors-container", self.interpreter.errors.len() > 0);
+    self.set_inner_html("warnings", &self.interpreter.warnings.join("<br>"));
+    self.set_id_visibility(
+      "warnings-container",
+      self.interpreter.warnings.len() > 0,
+    );
 
     self.set_breakpoints_and_current_line();
   }
 
   pub fn run_button(&mut self) {
-    self.run();
+    self.interpreter.run();
     self.update_ui();
   }
 
   pub fn step_button(&mut self) {
-    self.running = true;
+    self.interpreter.running = true;
     self.update_ui();
-    self.step();
-    self.running = false;
+    self.interpreter.step();
+    self.interpreter.running = false;
     self.update_ui();
   }
 
   pub fn reset_button(&mut self) {
-    self.reset();
-    self.set_inner_html(
-      "recent-instruction",
-      "The most recent instructions will be shown here when stepping.",
-    );
-    self.update_ui();
+    panic!("Not implemented yet")
+    /*
+     * self.interpreter.reset();
+     * self.set_inner_html(
+     *   "recent-instruction",
+     *   "The most recent instructions will be shown here when stepping.",
+     * );
+     * self.update_ui();
+     */
   }
 
   pub fn stop_button(&mut self) {
-    self.stop();
+    self.interpreter.stop();
     self.update_ui();
   }
 
   pub fn get_errors(&self) -> *const String {
-    self.errors.as_ptr()
+    self.interpreter.errors.as_ptr()
   }
 
   pub fn set_freqency_button(&mut self, unlimited: bool, freq: u32) {
     if unlimited {
-      self.frequency = None;
+      self.interpreter.frequency = None;
       self.set_inner_html(
         "freq",
         "CPU: Unrestricted <span class=\"caret\"></span>",
       );
     } else {
-      self.frequency = Some(freq);
+      self.interpreter.frequency = Some(freq);
       self.set_inner_html(
         "freq",
         &format!("CPU: {} Hz <span class=\"caret\"></span>", freq).as_str(),
@@ -335,6 +351,7 @@ impl Interpreter {
     assert_eq!(lines_elements.length(), 1);
 
     let max_line_num = self
+      .interpreter
       .instructions
       .iter()
       .map(|i| i.line_num)
@@ -355,7 +372,7 @@ impl Interpreter {
     for _i in 0..lines.length() {
       is_break.push(false);
     }
-    for instruction in &self.instructions {
+    for instruction in &self.interpreter.instructions {
       is_break[(instruction.line_num - 1/* 1 indexed */) as usize] =
         instruction.breakpoint;
     }
@@ -375,11 +392,11 @@ impl Interpreter {
         line.set_inner_html(format!("{}", line_num + 1).as_str());
       }
     }
-    let pc_line_num = (self.pc.get().value / 4) as usize;
-    if pc_line_num < self.instructions.len() {
+    let pc_line_num = (self.interpreter.pc.get().value / 4) as usize;
+    if pc_line_num < self.interpreter.instructions.len() {
       let next_inst_line = lines
         .item(
-          self.instructions[pc_line_num].line_num - 1, /* 1 indexed */
+          self.interpreter.instructions[pc_line_num].line_num - 1, /* 1 indexed */
         )
         .unwrap()
         .dyn_into::<web_sys::HtmlElement>()
@@ -394,7 +411,7 @@ impl Interpreter {
       parse_int::parse::<u32>(line_num.trim_matches(|c| !char::is_numeric(c)))
         .unwrap();
 
-    for mut instruction in self.instructions.iter_mut() {
+    for mut instruction in self.interpreter.instructions.iter_mut() {
       if instruction.line_num == ln {
         instruction.breakpoint = !instruction.breakpoint;
         log!("{:?}", instruction);
@@ -408,7 +425,8 @@ impl Interpreter {
     self.get_initial_registers();
     self.update_ui();
   }
-
+}
+impl Interpreter {
   fn run(&mut self) {
     self.running = true;
     // 4 bytes/instruction
@@ -434,10 +452,12 @@ impl Interpreter {
   fn stop(&mut self) {
     self.running = false;
   }
-
-  pub fn reset(&mut self) {
-    self.stop();
-    *self = Interpreter::new();
-    self.start();
-  }
+  /*
+   * Commented out because this is now totally wrong
+   * pub fn reset(&mut self) {
+   *   self.stop();
+   *   *self = Interpreter::new();
+   *   self.start();
+   * }
+   */
 }
