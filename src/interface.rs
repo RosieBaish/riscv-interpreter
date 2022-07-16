@@ -15,7 +15,7 @@ extern "C" {
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
 #[cfg(target_family = "wasm")]
 #[macro_export]
-macro_rules! log {
+macro_rules! log_inner {
     ( $( $t:tt )* ) => {
         web_sys::console::log_1(&format!( $( $t )* ).into());
     }
@@ -23,9 +23,28 @@ macro_rules! log {
 
 #[cfg(not(target_family = "wasm"))]
 #[macro_export]
-macro_rules! log {
+macro_rules! log_inner {
     ( $( $t:tt )* ) => {
       println!($( $t )* );
+    }
+}
+
+#[macro_export]
+macro_rules! function {
+  () => {{
+    fn f() {}
+    fn type_name_of<T>(_: T) -> &'static str {
+      std::any::type_name::<T>()
+    }
+    let name = type_name_of(f);
+    &name[..name.len() - 3]
+  }};
+}
+
+#[macro_export]
+macro_rules! log {
+    ($($tts:tt)*) => {
+      crate::log_inner!("{}: {}", crate::function!(), format!($($tts)*));
     }
 }
 
