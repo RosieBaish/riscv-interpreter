@@ -13,6 +13,5 @@ It uses the [Rust + WAsm template](https://github.com/rustwasm/wasm-pack-templat
 ## Licencing
 
 - The UI is under the MIT licence.
-- The licencing on the wasm-pack-template repo is not 100% clear. An open PR implies that it's MIT or Apache, but this is unconfirmed.
-- create-wasm-app is dual licenced MIT or Apache.
+- wasm-pack-template and create-wasm-app are dual licenced MIT or Apache.
 - All of my code is triple licenced, under MIT or Apache or BSD-2-clause.
