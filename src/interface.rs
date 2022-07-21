@@ -337,7 +337,7 @@ impl WebInterface {
 
     let lines_element = lines_elements.item(0).unwrap();
     log!("{}, {}", lines_element.child_element_count(), max_line_num);
-    for i in lines_element.child_element_count()..max_line_num + 1 {
+    for i in lines_element.child_element_count()..max_line_num {
       log!("{}, {}", lines_element.child_element_count(), max_line_num);
       let new_div =
         document.create_element("div").expect("Couldn't create div");
@@ -353,7 +353,8 @@ impl WebInterface {
 
     let lines: web_sys::HtmlCollection = lines_element.children();
 
-    assert!(lines.length() > max_line_num);
+    assert_eq!(lines.length(), max_line_num);
+
     // Have to create and then set, because of blank lines
     let is_break: Vec<bool> = self.interpreter.breakpoints();
 
