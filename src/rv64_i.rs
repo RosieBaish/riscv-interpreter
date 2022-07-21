@@ -18,7 +18,7 @@ pub fn sext_n(input: Register, current_len: u32) -> Register {
   for i in 0..current_len {
     total |= input.value & (1 << i);
   }
-  let highbit = input.value & (1 << current_len) >> current_len;
+  let highbit = (input.value & (1 << current_len - 1)) >> (current_len - 1);
   for i in current_len..64 {
     total |= highbit << i;
   }
