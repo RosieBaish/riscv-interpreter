@@ -1,8 +1,5 @@
-use crate::instruction::*;
 use crate::interpreter::*;
-use crate::rv64_i::MEMORY_SIZE;
 use crate::utils;
-use crate::PC;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -54,21 +51,32 @@ macro_rules! log {
     }
 }
 
+// Not part of the impl because it's called in the constructor
+fn get_initial_registers() -> Vec<String> {
+  let window = web_sys::window().expect("global window does not exists");
+  let document = window.document().expect("expecting a document on window");
+  let registers: web_sys::HtmlCollection = document
+    .get_element_by_id("registers")
+    .unwrap()
+    .get_elements_by_class_name("init-value");
+  let mut values: Vec<String> = Vec::new();
+  for i in 0..registers.length() {
+    let init_string: String = registers
+      .item(i)
+      .unwrap()
+      .dyn_into::<web_sys::HtmlInputElement>()
+      .unwrap()
+      .value();
+    values.push(init_string)
+  }
+  values
+}
+
 #[wasm_bindgen]
 impl WebInterface {
   pub fn new() -> WebInterface {
     utils::set_panic_hook();
-    let interpreter = Interpreter {
-      code: "".to_string(),
-      instructions: Vec::new(),
-      registers: [Register { value: 0 }; 32],
-      memory: [0; MEMORY_SIZE],
-      pc: PC::new(),
-      errors: Vec::new(),
-      warnings: Vec::new(),
-      frequency: Some(0),
-      running: false,
-    };
+    let interpreter = Interpreter::create(get_initial_registers());
     WebInterface {
       interpreter: interpreter,
       code_changed: false,
@@ -83,57 +91,23 @@ impl WebInterface {
       .unwrap() // De-optionify
       .dyn_into::<web_sys::HtmlTextAreaElement>() // Cast
       .unwrap(); // Unwrap the cast result
-    let code: String = self.value();
-    if code.ne(&self.interpreter.code) {
-      self.interpreter.code = code;
-      self.interpreter.parse();
-    }
+    let code: String = code_text.value();
+    self.interpreter.set_code(code);
   }
 
   pub fn code_change(&mut self) {
-    if self.interpreter.running {
+    if self.interpreter.running() {
       self.interpreter.stop();
     }
     self.code_changed = true;
   }
 
-  fn get_initial_registers(&mut self) {
-    self.interpreter.registers[0] = Register { value: 0 };
-    let window = web_sys::window().expect("global window does not exists");
-    let document = window.document().expect("expecting a document on window");
-    let registers: web_sys::HtmlCollection = document
-      .get_element_by_id("registers")
-      .unwrap()
-      .get_elements_by_class_name("init-value");
-    for i in 1..32 {
-      let init_string: String = registers
-        .item((i as u32) - 1) // -1 because x0 has no init-value field
-        .unwrap()
-        .dyn_into::<web_sys::HtmlInputElement>()
-        .unwrap()
-        .value();
-      log!("{}: {}\n", i, init_string);
-      self.interpreter.registers[i] = Register {
-        value: parse_int::parse::<u64>(&init_string).unwrap(),
-      };
-    }
-  }
-
   fn update_registers(&self) {
-    assert_eq!(self.interpreter.registers[0].value, 0);
-    for i in 1..32 {
-      self.set_inner_html(
-        format!("register_{}_decimal", i).as_str(),
-        format!("{}", self.interpreter.registers[i]).as_str(),
-      );
-      self.set_inner_html(
-        format!("register_{}_hex", i).as_str(),
-        format!("0x{:016X}", self.interpreter.registers[i]).as_str(),
-      );
-      self.set_inner_html(
-        format!("register_{}_binary", i).as_str(),
-        format!("0b{:064b}", self.interpreter.registers[i]).as_str(),
-      );
+    let register_representations = self.interpreter.registers_repr();
+    for (i, (dec, hex, bin)) in register_representations.iter().enumerate() {
+      self.set_inner_html(format!("register_{}_decimal", i).as_str(), dec);
+      self.set_inner_html(format!("register_{}_hex", i).as_str(), hex);
+      self.set_inner_html(format!("register_{}_binary", i).as_str(), bin);
     }
   }
 
@@ -142,7 +116,6 @@ impl WebInterface {
     document: &web_sys::Document,
     memory_element: &web_sys::HtmlElement,
   ) -> Option<()> {
-    // This doesn't actually need to be bool
     let memory_address_str: String = document
       .get_element_by_id("memory-address")?
       .dyn_into::<web_sys::HtmlInputElement>()
@@ -161,32 +134,26 @@ impl WebInterface {
       start = 0;
     }
     let mut end = start + (NUM_ROWS * BYTES_PER_ROW);
-    if end > MEMORY_SIZE as u32 {
-      end = MEMORY_SIZE as u32;
+    if end > self.interpreter.memory_size() {
+      end = self.interpreter.memory_size();
       start = end - (NUM_ROWS * BYTES_PER_ROW)
     }
 
     let mut memory_table: String = String::from("<tr>");
     for row_start in (start..end).step_by(BYTES_PER_ROW as usize) {
-      memory_table.push_str(&format!("<td>0x{:08x}</td>", row_start));
-      for byte in row_start..(row_start + BYTES_PER_ROW) {
-        memory_table.push_str(&format!(
-          "<td>{:02x}</td>",
-          self.interpreter.memory[byte as usize]
-        ));
-      }
-      let build_string_vec: Vec<String> = self.interpreter.memory
-        [row_start as usize..(row_start + BYTES_PER_ROW) as usize]
-        .iter()
-        .map(|num| {
-          if *num >= 32 && *num <= 126 {
-            (*num as char).to_string()
-          } else {
-            '.'.to_string()
-          }
-        })
-        .collect();
-      memory_table.push_str(&format!("<td>{}</td>", build_string_vec.join("")));
+      memory_table.push_str(&format!(
+        "<td>0x{:08x}</td><td>{}</td>",
+        row_start,
+        self
+          .interpreter
+          .memory_byte_repr(row_start as usize, BYTES_PER_ROW as usize)
+          .join("</td><td>")
+      ));
+      let build_string_vec: Vec<String> = self
+        .interpreter
+        .memory_ascii_repr(row_start as usize, BYTES_PER_ROW as usize);
+      memory_table
+        .push_str(&format!("<td>{}</td>", build_string_vec.join("</td><td>")));
       memory_table.push_str("</tr>");
     }
 
@@ -215,19 +182,18 @@ impl WebInterface {
     self.update_registers();
     self.update_memory();
 
+    let running = self.interpreter.running();
     self.set_parent_visibility("reset", true);
-    self.set_parent_visibility("step", !self.interpreter.running);
-    self.set_parent_visibility("run", !self.interpreter.running);
-    self.set_parent_visibility("stop", self.interpreter.running);
+    self.set_parent_visibility("step", !running);
+    self.set_parent_visibility("run", !running);
+    self.set_parent_visibility("stop", running);
 
-    self.set_inner_html("errors", &self.interpreter.errors.join("<br>"));
-    self
-      .set_id_visibility("errors-container", self.interpreter.errors.len() > 0);
-    self.set_inner_html("warnings", &self.interpreter.warnings.join("<br>"));
-    self.set_id_visibility(
-      "warnings-container",
-      self.interpreter.warnings.len() > 0,
-    );
+    let errors = self.interpreter.errors();
+    self.set_inner_html("errors", &errors.join("<br>"));
+    self.set_id_visibility("errors-container", errors.len() > 0);
+    let warnings = self.interpreter.warnings();
+    self.set_inner_html("warnings", &warnings.join("<br>"));
+    self.set_id_visibility("warnings-container", warnings.len() > 0);
 
     self.set_breakpoints_and_current_line();
   }
@@ -246,10 +212,10 @@ impl WebInterface {
       self.update_code();
       self.code_changed = false;
     }
-    self.interpreter.running = true;
+    self.interpreter.set_running(true);
     self.update_ui();
     self.interpreter.step();
-    self.interpreter.running = false;
+    self.interpreter.set_running(false);
     self.update_ui();
   }
 
@@ -270,19 +236,15 @@ impl WebInterface {
     self.update_ui();
   }
 
-  pub fn get_errors(&self) -> *const String {
-    self.interpreter.errors.as_ptr()
-  }
-
   pub fn set_freqency_button(&mut self, unlimited: bool, freq: u32) {
     if unlimited {
-      self.interpreter.frequency = None;
+      self.interpreter.set_frequency(None);
       self.set_inner_html(
         "freq",
         "CPU: Unrestricted <span class=\"caret\"></span>",
       );
     } else {
-      self.interpreter.frequency = Some(freq);
+      self.interpreter.set_frequency(Some(freq));
       self.set_inner_html(
         "freq",
         &format!("CPU: {} Hz <span class=\"caret\"></span>", freq).as_str(),
@@ -363,13 +325,15 @@ impl WebInterface {
     }
     assert_eq!(lines_elements.length(), 1);
 
-    let max_line_num = self
-      .interpreter
-      .instructions
-      .iter()
-      .map(|i| i.line_num)
-      .max()
-      .unwrap_or(0);
+    let max_line_num = document
+      .get_element_by_id("code")
+      .unwrap() // De-optionify
+      .dyn_into::<web_sys::HtmlTextAreaElement>() // Cast
+      .unwrap() // Unwrap the cast result
+      .value()
+      .trim()
+      .split("\n")
+      .count() as u32;
 
     let lines_element = lines_elements.item(0).unwrap();
     log!("{}, {}", lines_element.child_element_count(), max_line_num);
@@ -391,14 +355,9 @@ impl WebInterface {
 
     assert!(lines.length() > max_line_num);
     // Have to create and then set, because of blank lines
-    let mut is_break: Vec<bool> = Vec::with_capacity(max_line_num as usize);
-    for _i in 0..lines.length() {
-      is_break.push(false);
-    }
-    for instruction in &self.interpreter.instructions {
-      is_break[(instruction.line_num - 1/* 1 indexed */) as usize] =
-        instruction.breakpoint;
-    }
+    let is_break: Vec<bool> = self.interpreter.breakpoints();
+
+    assert_eq!(lines.length(), is_break.len() as u32);
 
     for line_num in 0..lines.length() {
       let line = lines
@@ -415,17 +374,12 @@ impl WebInterface {
         line.set_inner_html(format!("{}", line_num + 1).as_str());
       }
     }
-    let pc_line_num = (self.interpreter.pc.get().value / 4) as usize;
-    if pc_line_num < self.interpreter.instructions.len() {
-      let next_inst_line = lines
-        .item(
-          self.interpreter.instructions[pc_line_num].line_num - 1, /* 1 indexed */
-        )
-        .unwrap()
-        .dyn_into::<web_sys::HtmlElement>()
-        .unwrap();
-      self.add_class_if_missing(&next_inst_line, "lineselect");
-    }
+    let next_inst_line = lines
+      .item(self.interpreter.next_inst_line_num())
+      .unwrap()
+      .dyn_into::<web_sys::HtmlElement>()
+      .unwrap();
+    self.add_class_if_missing(&next_inst_line, "lineselect");
   }
 
   pub fn toggle_breakpoint(&mut self, line_num: &str) {
@@ -434,18 +388,12 @@ impl WebInterface {
       parse_int::parse::<u32>(line_num.trim_matches(|c| !char::is_numeric(c)))
         .unwrap();
 
-    for mut instruction in self.interpreter.instructions.iter_mut() {
-      if instruction.line_num == ln {
-        instruction.breakpoint = !instruction.breakpoint;
-        log!("{:?}", instruction);
-      }
-    }
+    self.interpreter.toggle_breakpoint(ln);
     self.set_breakpoints_and_current_line();
   }
 
   pub fn start(&mut self) {
-    self.update_if_necessary();
-    self.get_initial_registers();
+    self.update_code();
     self.update_ui();
   }
 }
