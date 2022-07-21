@@ -76,7 +76,7 @@ fn get_initial_registers() -> Vec<String> {
 impl WebInterface {
   pub fn new() -> WebInterface {
     utils::set_panic_hook();
-    let interpreter = Interpreter::create(get_initial_registers());
+    let interpreter = Interpreter::create_RiscV64_i(get_initial_registers());
     WebInterface {
       interpreter: interpreter,
       code_changed: false,

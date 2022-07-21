@@ -9,6 +9,7 @@ use tera::{Context, Tera};
 
 mod instruction;
 use instruction::Instruction;
+mod interpreter_dispatch;
 mod rustfmt;
 
 fn create_html(instructions: &Vec<Instruction>, registers: &Vec<Register>) {
@@ -158,6 +159,8 @@ fn main() -> std::io::Result<()> {
   .unwrap();
 
   create_html(&instructions, &registers);
+
+  interpreter_dispatch::create_dispatch_file()?;
 
   Ok(())
 }
