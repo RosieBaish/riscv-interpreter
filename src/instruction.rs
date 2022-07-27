@@ -3,9 +3,9 @@ use std::fmt;
 use std::ops;
 
 use crate::build_common::*;
+use crate::codegen::REGISTERS;
 use crate::interface;
 use crate::log;
-use crate::registers;
 use crate::rv64_i::MEMORY_SIZE;
 
 #[allow(dead_code)] // Dead code analysis doesn't check in generated code.
@@ -273,7 +273,7 @@ impl<'a> InstructionSource {
     for (actual, expected) in core::iter::zip(tokens.iter(), self.syntax.iter())
     {
       if expected.eq(&"rd") || expected.eq(&"rs1") || expected.eq(&"rs2") {
-        let reg_num = registers::NAMES.get(actual);
+        let reg_num = REGISTERS.get(actual);
         if reg_num.is_none() {
           log!("Failed to get reg num");
           self.format_error(tokens);

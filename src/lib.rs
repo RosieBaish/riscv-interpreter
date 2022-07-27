@@ -5,7 +5,6 @@ use instruction::*;
 #[macro_use]
 mod interface;
 mod interpreter;
-mod registers;
 mod rv64_i;
 mod utils;
 

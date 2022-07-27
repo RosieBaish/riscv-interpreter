@@ -16,6 +16,7 @@ pub trait InterpreterTrait {
   fn toggle_breakpoint(&mut self, line_num: u32);
   fn breakpoints(&self) -> Vec<bool>;
   fn set_frequency(&mut self, frequency: Option<u32>);
+  fn get_frequency(&self) -> Option<u32>;
   fn next_inst_line_num(&self) -> u32;
   fn run(&mut self);
   fn step(&mut self);

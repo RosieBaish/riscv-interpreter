@@ -177,7 +177,8 @@ pub fn create_dispatch_file() -> std::io::Result<()> {
     .iter()
     .map(|function_defn| {
       let preamble = format!(
-        "pub fn {}({}, {}) -> {} {{
+        "#[allow(dead_code)]
+pub fn {}({}, {}) -> {} {{
 match {}.architecture {{
 ",
         function_defn.name,
