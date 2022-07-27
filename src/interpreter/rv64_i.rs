@@ -42,6 +42,7 @@ impl RiscV64_i {
           value: parse_int::parse::<u64>(r).expect("Successful conversion"),
         };
     }
+
     interpreter
   }
 
@@ -174,6 +175,10 @@ impl InterpreterTrait for RiscV64_i {
     self.frequency = frequency;
   }
 
+  fn get_frequency(&self) -> Option<u32> {
+    self.frequency
+  }
+
   fn next_inst_line_num(&self) -> u32 {
     let next_inst_num = (self.pc.get().value / 4) as usize;
     if next_inst_num < self.instructions.len() {
@@ -185,15 +190,24 @@ impl InterpreterTrait for RiscV64_i {
 
   fn run(&mut self) {
     self.running = true;
-    // 4 bytes/instruction
-    let max_pc: u64 = self.instructions.len() as u64 * 4;
-    while self.pc.get().value < max_pc {
+
+    while self.running {
       self.step();
     }
-    self.running = false;
   }
 
   fn step(&mut self) {
+    if !self.running {
+      return;
+    }
+
+    // 4 bytes/instruction
+    let max_pc: u64 = self.instructions.len() as u64 * 4;
+    if self.pc.get().value >= max_pc {
+      self.running = false;
+      return;
+    }
+
     log!("{:?}; {}", self.registers, self.pc.get().value);
     self.pc.changed = false;
     let inst = &self.instructions[(self.pc.get().value / 4) as usize];

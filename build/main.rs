@@ -153,7 +153,22 @@ fn main() -> std::io::Result<()> {
   }
   rustfmt::write(
     format!("#[allow(unused_must_use)]\npub static INSTRUCTIONS: phf::Map<&'static str, InstructionSource> = {};\n",
-    instruction_map.build()),
+            instruction_map.build()),
+    &mut file,
+  )
+  .unwrap();
+
+  let mut register_map = phf_codegen::Map::new();
+  for (register_num, register) in registers.iter().enumerate() {
+    register_map
+      .entry(register.primary_name.clone(), &register_num.to_string());
+    for name in &register.secondary_names {
+      register_map.entry(name.clone(), &register_num.to_string());
+    }
+  }
+  rustfmt::write(
+    format!("#[allow(unused_must_use, dead_code)]\npub static REGISTERS: phf::Map<&'static str, u32> = {};\n",
+            register_map.build()),
     &mut file,
   )
   .unwrap();

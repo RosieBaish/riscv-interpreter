@@ -1,5 +1,6 @@
 use crate::interpreter::*;
 use crate::utils;
+use std::sync::{Arc, Mutex};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -7,12 +8,6 @@ use wasm_bindgen::JsCast;
 #[wasm_bindgen]
 extern "C" {
   pub fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-pub struct WebInterface {
-  interpreter: Interpreter,
-  code_changed: bool,
 }
 
 // A macro to provide `println!(..)`-style syntax for `console.log` logging.
@@ -73,13 +68,22 @@ fn get_initial_registers() -> Vec<String> {
 }
 
 #[wasm_bindgen]
+pub struct WebInterface {
+  rci: Arc<Mutex<Interpreter>>,
+  code_changed: bool,
+  step_func_token: Option<i32>,
+}
+
+#[wasm_bindgen]
 impl WebInterface {
   pub fn new() -> WebInterface {
     utils::set_panic_hook();
     let interpreter = Interpreter::create_RiscV64_i(get_initial_registers());
+
     WebInterface {
-      interpreter: interpreter,
+      rci: Arc::new(Mutex::new(interpreter)),
       code_changed: false,
+      step_func_token: None,
     }
   }
 
@@ -92,18 +96,18 @@ impl WebInterface {
       .dyn_into::<web_sys::HtmlTextAreaElement>() // Cast
       .unwrap(); // Unwrap the cast result
     let code: String = code_text.value();
-    self.interpreter.set_code(code);
+    self.rci.lock().unwrap().set_code(code);
   }
 
   pub fn code_change(&mut self) {
-    if self.interpreter.running() {
-      self.interpreter.stop();
+    if self.rci.lock().unwrap().running() {
+      self.rci.lock().unwrap().stop();
     }
     self.code_changed = true;
   }
 
   fn update_registers(&self) {
-    let register_representations = self.interpreter.registers_repr();
+    let register_representations = self.rci.lock().unwrap().registers_repr();
     for (i, (dec, hex, bin)) in register_representations.iter().enumerate() {
       self.set_inner_html(format!("register_{}_decimal", i).as_str(), dec);
       self.set_inner_html(format!("register_{}_hex", i).as_str(), hex);
@@ -121,6 +125,7 @@ impl WebInterface {
       .dyn_into::<web_sys::HtmlInputElement>()
       .ok()?
       .value();
+    let interpreter = self.rci.lock().unwrap();
     log!("memory_address: \"{}\"\n", memory_address_str);
     let memory_address: u32 =
       parse_int::parse::<u32>(&memory_address_str).ok()?;
@@ -134,8 +139,8 @@ impl WebInterface {
       start = 0;
     }
     let mut end = start + (NUM_ROWS * BYTES_PER_ROW);
-    if end > self.interpreter.memory_size() {
-      end = self.interpreter.memory_size();
+    if end > interpreter.memory_size() {
+      end = interpreter.memory_size();
       start = end - (NUM_ROWS * BYTES_PER_ROW)
     }
 
@@ -144,13 +149,11 @@ impl WebInterface {
       memory_table.push_str(&format!(
         "<td>0x{:08x}</td><td>{}</td>",
         row_start,
-        self
-          .interpreter
+        interpreter
           .memory_byte_repr(row_start as usize, BYTES_PER_ROW as usize)
           .join("</td><td>")
       ));
-      let build_string_vec: Vec<String> = self
-        .interpreter
+      let build_string_vec: Vec<String> = interpreter
         .memory_ascii_repr(row_start as usize, BYTES_PER_ROW as usize);
       memory_table
         .push_str(&format!("<td>{}</td>", build_string_vec.join("</td><td>")));
@@ -182,19 +185,21 @@ impl WebInterface {
     self.update_registers();
     self.update_memory();
 
-    let running = self.interpreter.running();
-    self.set_parent_visibility("reset", true);
-    self.set_parent_visibility("step", !running);
-    self.set_parent_visibility("run", !running);
-    self.set_parent_visibility("stop", running);
+    {
+      let interpreter = self.rci.lock().unwrap();
+      let running = interpreter.running();
+      self.set_parent_visibility("reset", true);
+      self.set_parent_visibility("step", !running);
+      self.set_parent_visibility("run", !running);
+      self.set_parent_visibility("stop", running);
 
-    let errors = self.interpreter.errors();
-    self.set_inner_html("errors", &errors.join("<br>"));
-    self.set_id_visibility("errors-container", errors.len() > 0);
-    let warnings = self.interpreter.warnings();
-    self.set_inner_html("warnings", &warnings.join("<br>"));
-    self.set_id_visibility("warnings-container", warnings.len() > 0);
-
+      let errors = interpreter.errors();
+      self.set_inner_html("errors", &errors.join("<br>"));
+      self.set_id_visibility("errors-container", errors.len() > 0);
+      let warnings = interpreter.warnings();
+      self.set_inner_html("warnings", &warnings.join("<br>"));
+      self.set_id_visibility("warnings-container", warnings.len() > 0);
+    }
     self.set_breakpoints_and_current_line();
   }
 
@@ -203,7 +208,24 @@ impl WebInterface {
       self.update_code();
       self.code_changed = false;
     }
-    self.interpreter.run();
+    self.rci.lock().unwrap().set_running(true);
+    let interpreter = self.rci.clone();
+    let step_func: Closure<dyn FnMut()> = Closure::new(move || {
+      interpreter.lock().unwrap().step();
+    });
+    let window = web_sys::window().expect("global window does not exists");
+    let interval: i32 = match self.rci.lock().unwrap().get_frequency() {
+      Some(freq) => (1000 / freq) as i32,
+      None => 1000,
+    };
+    let token = window
+      .set_interval_with_callback_and_timeout_and_arguments_0(
+        step_func.as_ref().unchecked_ref(),
+        interval,
+      )
+      .expect("Managed to set callback");
+    std::mem::forget(step_func);
+    self.step_func_token = Some(token);
     self.update_ui();
   }
 
@@ -212,17 +234,17 @@ impl WebInterface {
       self.update_code();
       self.code_changed = false;
     }
-    self.interpreter.set_running(true);
+    self.rci.lock().unwrap().set_running(true);
     self.update_ui();
-    self.interpreter.step();
-    self.interpreter.set_running(false);
+    self.rci.lock().unwrap().step();
+    self.rci.lock().unwrap().set_running(false);
     self.update_ui();
   }
 
   pub fn reset_button(&mut self) {
     panic!("Not implemented yet")
     /*
-     * self.interpreter.reset();
+     * log!("Test"); self.rci.lock().unwrap().reset();
      * self.set_inner_html(
      *   "recent-instruction",
      *   "The most recent instructions will be shown here when stepping.",
@@ -232,19 +254,30 @@ impl WebInterface {
   }
 
   pub fn stop_button(&mut self) {
-    self.interpreter.stop();
+    match self.step_func_token {
+      Some(token) => {
+        log!("Token is: {}", token);
+        let window = web_sys::window().expect("global window does not exists");
+        window.clear_interval_with_handle(token);
+        self.step_func_token = None;
+      }
+      None => {
+        log!("No Token");
+      }
+    }
+    self.rci.lock().unwrap().stop();
     self.update_ui();
   }
 
-  pub fn set_freqency_button(&mut self, unlimited: bool, freq: u32) {
+  pub fn set_frequency_button(&mut self, unlimited: bool, freq: u32) {
     if unlimited {
-      self.interpreter.set_frequency(None);
+      self.rci.lock().unwrap().set_frequency(None);
       self.set_inner_html(
         "freq",
         "CPU: Unrestricted <span class=\"caret\"></span>",
       );
     } else {
-      self.interpreter.set_frequency(Some(freq));
+      self.rci.lock().unwrap().set_frequency(Some(freq));
       self.set_inner_html(
         "freq",
         &format!("CPU: {} Hz <span class=\"caret\"></span>", freq).as_str(),
@@ -353,34 +386,37 @@ impl WebInterface {
 
     let lines: web_sys::HtmlCollection = lines_element.children();
 
-    assert_eq!(lines.length(), max_line_num);
+    assert!(lines.length() >= max_line_num);
 
     // Have to create and then set, because of blank lines
-    let is_break: Vec<bool> = self.interpreter.breakpoints();
+    {
+      let interpreter = self.rci.lock().unwrap();
+      let is_break: Vec<bool> = interpreter.breakpoints();
 
-    assert_eq!(lines.length(), is_break.len() as u32);
+      assert!(max_line_num >= is_break.len() as u32);
 
-    for line_num in 0..lines.length() {
-      let line = lines
-        .item(line_num)
+      for line_num in 0..lines.length() {
+        let line = lines
+          .item(line_num)
+          .unwrap()
+          .dyn_into::<web_sys::HtmlElement>()
+          .unwrap();
+        self.remove_class_if_present(&line, "lineselect");
+        if is_break[line_num as usize] {
+          line
+            // Unicode big red dot
+            .set_inner_html(format!("🔴 {}", line_num + 1).as_str());
+        } else {
+          line.set_inner_html(format!("{}", line_num + 1).as_str());
+        }
+      }
+      let next_inst_line = lines
+        .item(interpreter.next_inst_line_num())
         .unwrap()
         .dyn_into::<web_sys::HtmlElement>()
         .unwrap();
-      self.remove_class_if_present(&line, "lineselect");
-      if is_break[line_num as usize] {
-        line
-          // Unicode big red dot
-          .set_inner_html(format!("🔴 {}", line_num + 1).as_str());
-      } else {
-        line.set_inner_html(format!("{}", line_num + 1).as_str());
-      }
+      self.add_class_if_missing(&next_inst_line, "lineselect");
     }
-    let next_inst_line = lines
-      .item(self.interpreter.next_inst_line_num())
-      .unwrap()
-      .dyn_into::<web_sys::HtmlElement>()
-      .unwrap();
-    self.add_class_if_missing(&next_inst_line, "lineselect");
   }
 
   pub fn toggle_breakpoint(&mut self, line_num: &str) {
@@ -389,7 +425,7 @@ impl WebInterface {
       parse_int::parse::<u32>(line_num.trim_matches(|c| !char::is_numeric(c)))
         .unwrap();
 
-    self.interpreter.toggle_breakpoint(ln);
+    self.rci.lock().unwrap().toggle_breakpoint(ln);
     self.set_breakpoints_and_current_line();
   }
 
