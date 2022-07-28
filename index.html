@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width">
+  <title>RISC-V Interpreter</title>
+  <meta name="description" content="RISC-V Assembly Interpreter written in Rust and WebAssembly">
+  <link rel="stylesheet" type="text/css" href="static/bootstrap.css">
+  <link rel="stylesheet" type="text/css" href="static/jquery-linedtextarea.css">
+  <link rel="stylesheet" type="text/css" href="static/mips.css">
+  <style>
+    .hide {
+	display: none;
+    }
+
+    .instruction_description_name:hover + .hide {
+	display: block!important;
+	color: red;
+    }
+
+    #grid {
+	display: grid;
+	gap: 10px;
+	grid-template-columns: repeat(8, 1fr);
+	grid-auto-flow: row;
+    }
+  </style>
+  <style>
+    .tooltip {
+	position: relative;
+	display: inline-block;
+	border-bottom: 1px dotted #ccc;
+	color: #006080;
+    }
+
+    .tooltip .tooltiptext {
+	visibility: hidden;
+	position: absolute;
+	background-color: #555;
+	color: #fff;
+	text-align: center;
+	padding: 5px;
+	border-radius: 6px;
+	z-index: 1;
+	opacity: 0;
+	transition: opacity 0.3s;
+    }
+
+    .tooltip:hover .tooltiptext {
+	visibility: visible;
+	opacity: 1;
+    }
+
+    .tooltip-right {
+	top: -5px;
+	left: 125%;  
+    }
+
+    .tooltip-right::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	right: 100%;
+	margin-top: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: transparent #555 transparent transparent;
+    }
+
+    .tooltip-bottom {
+	top: 135%;
+	left: 50%;  
+	margin-left: -60px;
+    }
+
+    .tooltip-bottom::after {
+	content: "";
+	position: absolute;
+	bottom: 100%;
+	left: 50%;
+	margin-left: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: transparent transparent #555 transparent;
+    }
+
+    .tooltip-top {
+	bottom: 125%;
+	left: 50%;  
+	margin-left: -60px;
+    }
+
+    .tooltip-top::after {
+	content: "";
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	margin-left: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: #555 transparent transparent transparent;
+    }
+
+    .tooltip-left {
+	top: -5px;
+	bottom:auto;
+	right: 128%;  
+    }
+    .tooltip-left::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 100%;
+	margin-top: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: transparent transparent transparent #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="page-header">
+      <h1>RISC-V Interpreter</h1>
+    </div>
+    <div id="errors-container" class="alert alert-danger" style="display: none;">
+      <p class="lead">OOPS! Your code failed to run due to errors:</p>
+      <div id="errors"></div>
+    </div>
+    <div id="warnings-container" class="alert alert-warning" style="display: none;">
+      <p class="lead">Warning! Your code ran, but there were some issues:</p>
+      <div id="warnings"></div>
+    </div>
+    <div class="row">
+      <div class="col-md-6">
+        <p class="lead">Input your RISC-V code here:</p>
+        <div class="form-group">
+          <textarea id="code" rows="15" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+        </div>
+        <div class="btn-group btn-group-justified" role="group">
+          <div class="btn-group">
+            <button id="reset" class="btn btn-primary">Reset</button>
+          </div>
+          <div class="btn-group">
+            <button id="step" class="btn btn-warning">Step</button>
+          </div>
+          <div class="btn-group">
+            <button id="run" class="btn btn-success">Run</button>
+          </div>
+          <div class="btn-group" style="display: none;">
+            <button id="stop" class="btn btn-danger">Stop</button>
+          </div>
+          <div class="btn-group">
+            <button id="freq" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              CPU: 32 Hz
+              <span class="caret"></span>
+            </button>
+            <ul class="dropdown-menu">
+              <li><a id="set_freq_1" href="#">1 Hz</a></li>
+              <li><a id="set_freq_2" href="#">2 Hz</a></li>
+              <li><a id="set_freq_4" href="#">4 Hz</a></li>
+              <li><a id="set_freq_8" href="#">8 Hz</a></li>
+              <li><a id="set_freq_16" href="#">16 Hz</a></li>
+              <li><a id="set_freq_32" href="#">32 Hz</a></li>
+              <li><a id="set_freq_64" href="#">64 Hz</a></li>
+              <li><a id="set_freq_128" href="#">128 Hz</a></li>
+              <li><a id="set_freq_256" href="#">256 Hz</a></li>
+            </ul>
+          </div>
+        </div>
+        <br>
+        <div id="recent-instruction" class="well">The most recent instructions will be shown here when stepping.</div>
+        <hr>
+        <h4>Features</h4>
+        <ul>
+          <li><em>Reset</em> to load the code, <em>Step</em> one instruction, or <em>Run</em> all instructions</li>
+          <li>Set a breakpoint by clicking on the line number (only for <em>Run</em>)</li>
+          <li>View <a href="#register-table">registers</a> on the right, <a href="#memory-table">memory</a> on the bottom of this page</li>
+        </ul>
+        <h4>Supported Instructions</h4>
+        <div id="grid">
+	  
+	  
+<div class="tooltip">
+  <code>
+    lui
+  </code>
+  <div class="tooltiptext">
+    [lui, rd, ,, imm20]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    auipc
+  </code>
+  <div class="tooltiptext">
+    [auipc, rd, ,, imm20]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    addi
+  </code>
+  <div class="tooltiptext">
+    [addi, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    slti
+  </code>
+  <div class="tooltiptext">
+    [slti, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sltiu
+  </code>
+  <div class="tooltiptext">
+    [sltiu, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    xori
+  </code>
+  <div class="tooltiptext">
+    [xori, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    ori
+  </code>
+  <div class="tooltiptext">
+    [ori, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    andi
+  </code>
+  <div class="tooltiptext">
+    [andi, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    slli
+  </code>
+  <div class="tooltiptext">
+    [slli, rd, ,, rs1, ,, shamt]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    srli
+  </code>
+  <div class="tooltiptext">
+    [srli, rd, ,, rs1, ,, shamt]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    srai
+  </code>
+  <div class="tooltiptext">
+    [srai, rd, ,, rs1, ,, shamt]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    add
+  </code>
+  <div class="tooltiptext">
+    [add, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sub
+  </code>
+  <div class="tooltiptext">
+    [sub, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sll
+  </code>
+  <div class="tooltiptext">
+    [sll, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    slt
+  </code>
+  <div class="tooltiptext">
+    [slt, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sltu
+  </code>
+  <div class="tooltiptext">
+    [sltu, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    xor
+  </code>
+  <div class="tooltiptext">
+    [xor, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    srl
+  </code>
+  <div class="tooltiptext">
+    [srl, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sra
+  </code>
+  <div class="tooltiptext">
+    [sra, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    or
+  </code>
+  <div class="tooltiptext">
+    [or, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    and
+  </code>
+  <div class="tooltiptext">
+    [and, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    fence
+  </code>
+  <div class="tooltiptext">
+    [fence, pred, ,, succ]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    fence.i
+  </code>
+  <div class="tooltiptext">
+    [fence.i]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    csrrw
+  </code>
+  <div class="tooltiptext">
+    [csrrw, rd, ,, offset, ,, rs1]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    csrrs
+  </code>
+  <div class="tooltiptext">
+    [csrrs, rd, ,, offset, ,, rs1]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    csrrc
+  </code>
+  <div class="tooltiptext">
+    [csrrc, rd, ,, offset, ,, rs1]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    csrrwi
+  </code>
+  <div class="tooltiptext">
+    [csrrwi, rd, ,, offset, ,, uimm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    csrrsi
+  </code>
+  <div class="tooltiptext">
+    [csrrsi, rd, ,, offset, ,, uimm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    csrrci
+  </code>
+  <div class="tooltiptext">
+    [csrrci, rd, ,, offset, ,, uimm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    ecall
+  </code>
+  <div class="tooltiptext">
+    [ecall]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    ebreak
+  </code>
+  <div class="tooltiptext">
+    [ebreak]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    uret
+  </code>
+  <div class="tooltiptext">
+    [uret]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sret
+  </code>
+  <div class="tooltiptext">
+    [sret]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    mret
+  </code>
+  <div class="tooltiptext">
+    [mret]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    wfi
+  </code>
+  <div class="tooltiptext">
+    [wfi]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sfence.vma
+  </code>
+  <div class="tooltiptext">
+    [sfence.vma, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    lb
+  </code>
+  <div class="tooltiptext">
+    [lb, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    lh
+  </code>
+  <div class="tooltiptext">
+    [lh, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    lw
+  </code>
+  <div class="tooltiptext">
+    [lw, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    lbu
+  </code>
+  <div class="tooltiptext">
+    [lbu, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    lhu
+  </code>
+  <div class="tooltiptext">
+    [lhu, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sb
+  </code>
+  <div class="tooltiptext">
+    [sb, rs2, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sh
+  </code>
+  <div class="tooltiptext">
+    [sh, rs2, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sw
+  </code>
+  <div class="tooltiptext">
+    [sw, rs2, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    jal
+  </code>
+  <div class="tooltiptext">
+    [jal, rd, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    jalr
+  </code>
+  <div class="tooltiptext">
+    [jalr, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    beq
+  </code>
+  <div class="tooltiptext">
+    [beq, rs1, ,, rs2, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    bne
+  </code>
+  <div class="tooltiptext">
+    [bne, rs1, ,, rs2, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    blt
+  </code>
+  <div class="tooltiptext">
+    [blt, rs1, ,, rs2, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    bge
+  </code>
+  <div class="tooltiptext">
+    [bge, rs1, ,, rs2, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    bltu
+  </code>
+  <div class="tooltiptext">
+    [bltu, rs1, ,, rs2, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    bgeu
+  </code>
+  <div class="tooltiptext">
+    [bgeu, rs1, ,, rs2, ,, offset]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    addiw
+  </code>
+  <div class="tooltiptext">
+    [addiw, rd, ,, rs1, ,, imm]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    slliw
+  </code>
+  <div class="tooltiptext">
+    [slliw, rd, ,, rs1, ,, shamt]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    srliw
+  </code>
+  <div class="tooltiptext">
+    [srliw, rd, ,, rs1, ,, shamt]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sraiw
+  </code>
+  <div class="tooltiptext">
+    [sraiw, rd, ,, rs1, ,, shamt]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    addw
+  </code>
+  <div class="tooltiptext">
+    [addw, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    subw
+  </code>
+  <div class="tooltiptext">
+    [subw, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sllw
+  </code>
+  <div class="tooltiptext">
+    [sllw, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    srlw
+  </code>
+  <div class="tooltiptext">
+    [srlw, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sraw
+  </code>
+  <div class="tooltiptext">
+    [sraw, rd, ,, rs1, ,, rs2]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    lwu
+  </code>
+  <div class="tooltiptext">
+    [lwu, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    ld
+  </code>
+  <div class="tooltiptext">
+    [ld, rd, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	  
+<div class="tooltip">
+  <code>
+    sd
+  </code>
+  <div class="tooltiptext">
+    [sd, rs2, ,, offset, (, rs1, )]
+  </div>
+</div>
+
+	  
+	</div>
+      </div>
+      <div class="col-md-6">
+        <div id="register-table" class="table-responsive">
+          <table class="table table-hover table-condensed">
+            <thead>
+              <tr>
+                <th>Init Value</th>
+                <th>Register</th>
+                <th>Decimal</th>
+                <th>Hex</th>
+                <th>Binary</th>
+              </tr>
+            </thead>
+            <tbody id="registers">
+	      
+              <tr>
+		<td>
+		  
+		  0
+		  
+		</td>
+		<td>x0 (zero)</td>
+		<td id="register_0_decimal">0</td>
+		<td id="register_0_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_0_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x1 (ra)</td>
+		<td id="register_1_decimal">0</td>
+		<td id="register_1_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_1_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x2 (sp)</td>
+		<td id="register_2_decimal">0</td>
+		<td id="register_2_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_2_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x3 (gp)</td>
+		<td id="register_3_decimal">0</td>
+		<td id="register_3_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_3_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x4 (tp)</td>
+		<td id="register_4_decimal">0</td>
+		<td id="register_4_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_4_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x5 (t0)</td>
+		<td id="register_5_decimal">0</td>
+		<td id="register_5_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_5_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x6 (t1)</td>
+		<td id="register_6_decimal">0</td>
+		<td id="register_6_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_6_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x7 (t2)</td>
+		<td id="register_7_decimal">0</td>
+		<td id="register_7_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_7_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x8 (s0, fp)</td>
+		<td id="register_8_decimal">0</td>
+		<td id="register_8_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_8_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x9 (s1)</td>
+		<td id="register_9_decimal">0</td>
+		<td id="register_9_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_9_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x10 (a0)</td>
+		<td id="register_10_decimal">0</td>
+		<td id="register_10_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_10_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x11 (a1)</td>
+		<td id="register_11_decimal">0</td>
+		<td id="register_11_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_11_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x12 (a2)</td>
+		<td id="register_12_decimal">0</td>
+		<td id="register_12_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_12_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x13 (a3)</td>
+		<td id="register_13_decimal">0</td>
+		<td id="register_13_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_13_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x14 (a4)</td>
+		<td id="register_14_decimal">0</td>
+		<td id="register_14_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_14_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x15 (a5)</td>
+		<td id="register_15_decimal">0</td>
+		<td id="register_15_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_15_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x16 (a6)</td>
+		<td id="register_16_decimal">0</td>
+		<td id="register_16_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_16_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x17 (a7)</td>
+		<td id="register_17_decimal">0</td>
+		<td id="register_17_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_17_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x18 (s2)</td>
+		<td id="register_18_decimal">0</td>
+		<td id="register_18_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_18_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x19 (s3)</td>
+		<td id="register_19_decimal">0</td>
+		<td id="register_19_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_19_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x20 (s4)</td>
+		<td id="register_20_decimal">0</td>
+		<td id="register_20_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_20_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x21 (s5)</td>
+		<td id="register_21_decimal">0</td>
+		<td id="register_21_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_21_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x22 (s6)</td>
+		<td id="register_22_decimal">0</td>
+		<td id="register_22_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_22_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x23 (s7)</td>
+		<td id="register_23_decimal">0</td>
+		<td id="register_23_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_23_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x24 (s8)</td>
+		<td id="register_24_decimal">0</td>
+		<td id="register_24_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_24_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x25 (s9)</td>
+		<td id="register_25_decimal">0</td>
+		<td id="register_25_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_25_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x26 (s10)</td>
+		<td id="register_26_decimal">0</td>
+		<td id="register_26_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_26_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x27 (s11)</td>
+		<td id="register_27_decimal">0</td>
+		<td id="register_27_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_27_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x28 (t3)</td>
+		<td id="register_28_decimal">0</td>
+		<td id="register_28_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_28_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x29 (t4)</td>
+		<td id="register_29_decimal">0</td>
+		<td id="register_29_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_29_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x30 (t5)</td>
+		<td id="register_30_decimal">0</td>
+		<td id="register_30_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_30_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+              <tr>
+		<td>
+		  
+		  <input class="init-value" type="text" value="0">
+		  
+		</td>
+		<td>x31 (t6)</td>
+		<td id="register_31_decimal">0</td>
+		<td id="register_31_hex">0x0000000000000000</td>
+		<td>
+		  <div class="tooltip">
+		    0b...
+		    <div id="register_31_binary" class="tooltiptext tooltip-left">
+		      0b0000000000000000000000000000000000000000000000000000000000000000
+		    </div>
+		  </div>
+		</td>
+	      </tr>
+	      
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <hr>
+    <div class="row">
+      <div class="col-md-12">
+        <div class="form-inline text-center">
+          <div class="form-group">
+            <label for="memory-address">Memory Address</label>
+            <input type="text" id="memory-address" class="form-control" placeholder="0x00000000" value="0x00000000">
+          </div>
+          <button id="memory-go" class="btn btn-primary">Go</button>
+          <button id="memory-download" class="btn btn-primary">Download!</button>
+        </div>
+        <br>
+        <div id="memory-table" class="table-responsive">
+          <table class="table table-hover table-condensed">
+            <thead>
+              <tr>
+                <th>Memory Address</th>
+                <th colspan="16">Bytes</th>
+                <th>ASCII</th>
+              </tr>
+            </thead>
+            <tbody id="memory">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="static/jquery.min.js"></script>
+  <script src="static/sprintf.min.js"></script>
+  <script src="static/jquery-linedtextarea.js"></script>
+  <script src="static/bootstrap.min.js"></script>
+  <script src="static/mips.js"></script>
+  <script src="static/FileSaver.js"></script>
+  <script src="static/downloader.js"></script>
+  <script src="bootstrap.js"></script>
+</body>
