@@ -426,4 +426,8 @@ Memory addresses must be from 0x00000000 - 0x7fffffff</td></tr>",
     self.update_code();
     self.update_ui();
   }
+
+  pub fn running(&self) -> bool {
+    self.rci.lock().unwrap().running()
+  }
 }
