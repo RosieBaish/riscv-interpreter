@@ -8,7 +8,13 @@ var interval_id = null;
 
 document.getElementById('memory-go').onclick = () => interpreter.update_ui();
 document.getElementById("run").onclick = () => {
-  interval_id = setInterval(() => interpreter.update_ui(), 100);
+  interval_id = setInterval(() => {
+    interpreter.update_ui()
+    if (!interpreter.running() && interval_id !== null) {
+      clearInterval(interval_id);
+      interval_id = null;
+    }
+  }, 100);
   interpreter.run_button();
 }
 document.getElementById("step").onclick = () => interpreter.step_button();
@@ -40,7 +46,6 @@ $('.codelines').on('click', '.lineno', function() {
 $('#code').bind('input propertychange', function() { // if the code changes, invalidate the current program instance
   interpreter.code_change();
   document.getElementById('recent-instruction').innerHTML = "Execution automatically stopped because of code change."
-  interpreter.update_if_necessary();
 });
 
 interpreter.start();
@@ -64,4 +69,3 @@ for (var i=0; i<=8; i++){
 }
 
 setFrequency(1);
-
