@@ -4,7 +4,6 @@ use std::io;
 use std::io::*;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use which;
 
 /// Write these bindings as source text to the given `Write`able.
 pub fn write<W: std::io::Write>(
@@ -13,11 +12,11 @@ pub fn write<W: std::io::Write>(
 ) -> io::Result<()> {
   match rustfmt_generated_string(&text) {
     Ok(formatted_text) => {
-      writer.write(formatted_text.as_bytes())?;
+      writer.write_all(formatted_text.as_bytes())?;
     }
     Err(err) => {
       eprintln!("Failed to run rustfmt: {} (non-fatal, continuing)", err);
-      writer.write(text.as_bytes())?;
+      writer.write_all(text.as_bytes())?;
     }
   }
   Ok(())
@@ -35,7 +34,7 @@ fn rustfmt_path<'a>() -> io::Result<Cow<'a, PathBuf>> {
 }
 
 /// Checks if rustfmt_bindings is set and runs rustfmt on the string
-fn rustfmt_generated_string<'a>(source: &'a str) -> io::Result<Cow<'a, str>> {
+fn rustfmt_generated_string(source: &str) -> io::Result<Cow<str>> {
   let rustfmt = rustfmt_path()?;
   let mut cmd = Command::new(&*rustfmt);
 

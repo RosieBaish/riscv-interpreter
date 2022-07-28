@@ -3,8 +3,8 @@ use crate::instruction::Register;
 
 pub fn sext<const ARRLEN: usize>(input: [bool; ARRLEN]) -> Register {
   let mut total: u64 = 0;
-  for i in 0..ARRLEN {
-    total |= (input[i] as u64) << i;
+  for (index, value) in input.iter().enumerate() {
+    total |= (*value as u64) << index;
   }
   for i in ARRLEN..64 {
     total |= (input[ARRLEN - 1] as u64) << i;
@@ -18,7 +18,7 @@ pub fn sext_n(input: Register, current_len: u32) -> Register {
   for i in 0..current_len {
     total |= input.value & (1 << i);
   }
-  let highbit = (input.value & (1 << current_len - 1)) >> (current_len - 1);
+  let highbit = (input.value & (1 << (current_len - 1))) >> (current_len - 1);
   for i in current_len..64 {
     total |= highbit << i;
   }
@@ -28,7 +28,7 @@ pub fn sext_n(input: Register, current_len: u32) -> Register {
 pub fn signed_lt(left: Register, right: Register) -> bool {
   let s_left = i64::from_ne_bytes(left.value.to_ne_bytes());
   let s_right = i64::from_ne_bytes(right.value.to_ne_bytes());
-  return s_left < s_right;
+  s_left < s_right
 }
 
 pub fn arith_r_shift_i(val: Register, offset: u64) -> Register {
