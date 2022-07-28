@@ -1,5 +1,6 @@
 use crate::interpreter::*;
 use crate::utils;
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 
 use wasm_bindgen::prelude::*;
@@ -42,7 +43,7 @@ macro_rules! function {
 #[macro_export]
 macro_rules! log {
     ($($tts:tt)*) => {
-      crate::log_inner!("{}:{} - {}", crate::function!(), std::line!(), format!($($tts)*));
+      $crate::log_inner!("{}:{} - {}", $crate::function!(), std::line!(), format!($($tts)*));
     }
 }
 
@@ -72,6 +73,12 @@ pub struct WebInterface {
   rci: Arc<Mutex<Interpreter>>,
   code_changed: bool,
   step_func_token: Option<i32>,
+}
+
+impl Default for WebInterface {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 #[wasm_bindgen]
@@ -134,7 +141,7 @@ impl WebInterface {
     const NUM_ROWS: u32 = 10;
     let mut start = memory_address & (!(BYTES_PER_ROW - 1));
     if start > ((NUM_ROWS / 2) * BYTES_PER_ROW) {
-      start = start - ((NUM_ROWS / 2) * BYTES_PER_ROW);
+      start -= (NUM_ROWS / 2) * BYTES_PER_ROW;
     } else {
       start = 0;
     }
@@ -146,18 +153,23 @@ impl WebInterface {
 
     let mut memory_table: String = String::from("<tr>");
     for row_start in (start..end).step_by(BYTES_PER_ROW as usize) {
-      memory_table.push_str(&format!(
+      write!(
+        memory_table,
         "<td>0x{:08x}</td><td>{}</td>",
         row_start,
         interpreter
           .memory_byte_repr(row_start as usize, BYTES_PER_ROW as usize)
           .join("</td><td>")
-      ));
+      )
+      .ok()?;
       let build_string_vec: Vec<String> = interpreter
         .memory_ascii_repr(row_start as usize, BYTES_PER_ROW as usize);
-      memory_table
-        .push_str(&format!("<td>{}</td>", build_string_vec.join("</td><td>")));
-      memory_table.push_str("</tr>");
+      write!(
+        memory_table,
+        "<td>{}</td></tr>",
+        build_string_vec.join("</td><td>")
+      )
+      .ok()?;
     }
 
     memory_element.set_inner_html(&memory_table);
@@ -176,7 +188,11 @@ impl WebInterface {
     match self.try_update_memory(&document, &memory_element) {
       Some(()) => (),
       None => {
-        memory_element.set_inner_html(format!("<tr class=\"danger\"><td>Invalid memory location or error printing memory. Memory addresses must be from 0x00000000 - 0x7fffffff</td></tr>").as_str());
+        memory_element.set_inner_html(
+          "<tr class=\"danger\">
+<td>Invalid memory location or error printing memory.
+Memory addresses must be from 0x00000000 - 0x7fffffff</td></tr>",
+        );
       }
     }
   }
@@ -195,10 +211,10 @@ impl WebInterface {
 
       let errors = interpreter.errors();
       self.set_inner_html("errors", &errors.join("<br>"));
-      self.set_id_visibility("errors-container", errors.len() > 0);
+      self.set_id_visibility("errors-container", !errors.is_empty());
       let warnings = interpreter.warnings();
       self.set_inner_html("warnings", &warnings.join("<br>"));
-      self.set_id_visibility("warnings-container", warnings.len() > 0);
+      self.set_id_visibility("warnings-container", !warnings.is_empty());
     }
     self.set_breakpoints_and_current_line();
   }
@@ -280,7 +296,7 @@ impl WebInterface {
       self.rci.lock().unwrap().set_frequency(Some(freq));
       self.set_inner_html(
         "freq",
-        &format!("CPU: {} Hz <span class=\"caret\"></span>", freq).as_str(),
+        format!("CPU: {} Hz <span class=\"caret\"></span>", freq).as_str(),
       );
     }
   }
@@ -365,7 +381,7 @@ impl WebInterface {
       .unwrap() // Unwrap the cast result
       .value()
       .trim()
-      .split("\n")
+      .split('\n')
       .count() as u32;
 
     let lines_element = lines_elements.item(0).unwrap();

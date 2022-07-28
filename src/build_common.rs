@@ -1,13 +1,14 @@
 pub fn tokenise(line: &str) -> Vec<String> {
-  let splits: Vec<&str> = line
+  let splits: Vec<String> = line
     .trim()
     .split_inclusive(&[' ', '\t', ',', '(', ')'])
+    .map(|s| s.to_string())
     .collect();
   let mut new_splits: Vec<String> = Vec::new();
   for split in splits {
     let mut new_split = split.clone();
-    new_split = new_split.trim();
-    if new_split == "" {
+    new_split = new_split.trim().to_string();
+    if new_split.is_empty() {
       continue;
     }
     if new_split.ends_with(&[',', '(', ')']) {

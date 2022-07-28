@@ -49,13 +49,13 @@ impl RiscV64_i {
   fn parse(&mut self) {
     for (ln, line) in self.code.lines().enumerate() {
       let line_num: u32 = (ln + 1).try_into().unwrap(); // Source is 1 indexed
-      let instruction: &str = line.split("//").nth(0).unwrap().trim();
-      if instruction == "" {
+      let instruction: &str = line.split("//").next().unwrap().trim();
+      if instruction.is_empty() {
         continue;
       }
 
       let opt_inst: Option<&InstructionSource> =
-        INSTRUCTIONS.get(instruction.split_whitespace().nth(0).unwrap());
+        INSTRUCTIONS.get(instruction.split_whitespace().next().unwrap());
       if opt_inst.is_none() {
         self.errors.push(format!(
           "Invalid instruction on line {}: {}",
@@ -71,7 +71,7 @@ impl RiscV64_i {
       let impl_func = (inst.implementation)(args.unwrap());
       let actual_instruction = Instruction {
         source: inst,
-        line_num: line_num,
+        line_num,
         breakpoint: false,
         implementation: impl_func,
       };

@@ -16,13 +16,13 @@ pub struct Instruction {
 impl Instruction {
   fn reg_or_imm(arg: &String) -> &'static str {
     if arg.eq(&"imm".to_string()) || arg.eq(&"offset".to_string()) {
-      return "Imm12";
+      "Imm12"
     } else if arg.eq(&"imm20".to_string()) {
-      return "Imm20";
+      "Imm20"
     } else if arg.eq(&"shamt".to_string()) {
-      return "Shamt";
+      "Shamt"
     } else {
-      return "Register";
+      "Register"
     }
   }
 
@@ -36,16 +36,16 @@ impl Instruction {
   }
 
   fn escaped_mnemonic(&self) -> String {
-    return self.mnemonic.replace(|c: char| !c.is_alphanumeric(), "_");
+    self.mnemonic.replace(|c: char| !c.is_alphanumeric(), "_")
   }
 
   pub fn create_implementation_source(&self) -> String {
-    let mut impl_src = String::from(format!(
+    let mut impl_src = format!(
       "#[allow(unused_variables)]\n\
-       fn {} (args: Vec<ImplementationArg>) -> Box<dyn Fn(&mut [Register; 32], &mut PC, &mut [u8; crate::rv64_i::MEMORY_SIZE])> {{\n\
+       fn {} (args: Vec<ImplementationArg>) -> MachineInstruction {{\n\
        if let [",
       self.escaped_mnemonic(),
-    ));
+    );
     for arg in self.get_args() {
       impl_src.push_str(
         format!(

@@ -11,14 +11,14 @@ use std::path::Path;
 /// close bracket. It assumes that all brackets are matched, e.g. that
 /// the source is well formed and doesn't contain any comments or strings
 /// which contain non-matching brackets.
-fn find_matching<'a>(code: &'a str) -> Option<&'a str> {
+fn find_matching(code: &str) -> Option<&str> {
   let mut num_levels = 0;
   let trimmed_code = code.trim();
-  let opening = trimmed_code.chars().nth(0)?;
+  let opening = trimmed_code.chars().next()?;
   println!(
     "code: {}; trimmed: {}; opening: {}",
-    code[..10].to_string(),
-    trimmed_code[..10].to_string(),
+    &code[..10],
+    &trimmed_code[..10],
     opening
   );
   let closing = match opening {
@@ -76,25 +76,25 @@ impl FunctionDefn {
     assert!(code.trim().starts_with("fn "));
     println!("{}", code.trim());
 
-    let (name, _) = &code.trim().strip_prefix("fn ")?.split_once("(")?;
+    let (name, _) = &code.trim().strip_prefix("fn ")?.split_once('(')?;
     println!("{}", name);
     let remainder = &code.trim().strip_prefix("fn ")?.strip_prefix(name)?;
     let args = find_matching(remainder)?;
     println!("{}", args);
 
-    let (self_arg, other_args) = match args.split_once(",") {
+    let (self_arg, other_args) = match args.split_once(',') {
       Some((l, r)) => (l, r),
       None => (args, ""),
     };
 
     let option_return_type = match remainder.split_once(" -> ") {
       None => None,
-      Some((_, r)) => Some(r.trim().strip_suffix(";")?.to_string()),
+      Some((_, r)) => Some(r.trim().strip_suffix(';')?.to_string()),
     };
 
     let mut vec_args: Vec<(String, String)> = Vec::new();
-    for arg in other_args.split(",").map(|s| s.trim()) {
-      if arg == "" {
+    for arg in other_args.split(',').map(|s| s.trim()) {
+      if arg.is_empty() {
         continue;
       }
       println!("{}", arg);
@@ -115,8 +115,7 @@ impl FunctionDefn {
     code
       .trim()
       .lines()
-      .map(FunctionDefn::parse)
-      .flatten()
+      .filter_map(FunctionDefn::parse)
       .collect()
   }
 }
@@ -158,14 +157,14 @@ pub fn create_dispatch_file() -> std::io::Result<()> {
     .expect("File read error");
 
   let trait_defn = find_structure(&contents, "pub trait InterpreterTrait")
-    .ok_or(Error::from(ErrorKind::NotFound))?;
+    .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
   let enum_defn = find_structure(&contents, "enum Architecture")
-    .ok_or(Error::from(ErrorKind::NotFound))?;
+    .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
 
   println!(
     "trait_defn: {}[...]{}",
-    trait_defn[..10].to_string(),
-    trait_defn[trait_defn.len() - 10..].to_string()
+    &trait_defn[..10],
+    &trait_defn[trait_defn.len() - 10..],
   );
 
   let function_defns = FunctionDefn::parse_lines(trait_defn);
@@ -178,6 +177,7 @@ pub fn create_dispatch_file() -> std::io::Result<()> {
     .map(|function_defn| {
       let preamble = format!(
         "#[allow(dead_code)]
+#[allow(clippy::unused_unit)]
 pub fn {}({}, {}) -> {} {{
 match {}.architecture {{
 ",
@@ -213,7 +213,6 @@ match {}.architecture {{
         .collect();
       let postamble = "}\n}\n";
       format!("{}\n{}\n{}", preamble, member_lines.join("\n\t"), postamble)
-        .to_string()
     })
     .collect();
 
@@ -222,8 +221,7 @@ match {}.architecture {{
       "use crate::interpreter::Architecture::*;
 impl Interpreter {{\n{}\n}}",
       implementations.join("\n"),
-    )
-    .to_string(),
+    ),
     &mut output_file,
   )
   .unwrap();

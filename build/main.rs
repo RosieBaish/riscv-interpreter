@@ -44,7 +44,7 @@ impl Register {
         primary_name: primary.trim().to_string(),
         secondary_names: secondary
           .trim()
-          .split("/")
+          .split('/')
           .map(str::trim)
           .map(str::to_string)
           .collect(),
@@ -68,12 +68,12 @@ fn parse_org_file(filename: &str) -> (Vec<Instruction>, Vec<Register>) {
   let mut current_title: &str = "";
   let mut current_section: Vec<&str> = Vec::new();
   for line in contents.lines() {
-    if line.starts_with("* ") {
-      if current_section.len() != 0 {
+    if let Some(stripped_title) = line.strip_prefix("* ") {
+      if !current_section.is_empty() {
         sections.insert(current_title, current_section);
         current_section = Vec::new();
       }
-      current_title = &line[2..];
+      current_title = stripped_title;
     } else {
       current_section.push(line);
     }
@@ -101,11 +101,11 @@ fn parse_org_file(filename: &str) -> (Vec<Instruction>, Vec<Register>) {
 fn parse_org_table<'a, const NUM_COLUMNS: usize>(
   table: &Vec<&'a str>,
 ) -> Vec<[&'a str; NUM_COLUMNS]> {
-  let mut column_titles: Vec<&str> = table[0].split("|").collect();
+  let mut column_titles: Vec<&str> = table[0].split('|').collect();
   column_titles = column_titles[1..].to_vec();
   column_titles.pop();
   for title in column_titles {
-    print!("{}\n", title.trim());
+    println!("{}", title.trim());
   }
   let mut cells: Vec<[&str; NUM_COLUMNS]> = Vec::new();
   let mut found_split = false;
@@ -120,7 +120,7 @@ fn parse_org_table<'a, const NUM_COLUMNS: usize>(
     if line.trim() == "" {
       continue;
     }
-    let mut cols: Vec<&str> = line.split("|").collect();
+    let mut cols: Vec<&str> = line.split('|').collect();
     cols = cols[1..].to_vec();
     cols.pop();
     println!("{}: {:?}", line, cols);
@@ -136,9 +136,12 @@ fn main() -> std::io::Result<()> {
   let mut file = BufWriter::new(File::create(&path).unwrap());
 
   rustfmt::write(
-    "use crate::instruction::*;\n\
-     use crate::rv64_i::*;\n\
-     \n"
+    "use crate::instruction::*;
+use crate::rv64_i::*;
+pub type MachineInstruction = Box<dyn Fn(
+&mut [Register; 32],
+&mut PC,
+&mut [u8; crate::rv64_i::MEMORY_SIZE])>;"
       .to_string(),
     &mut file,
   )

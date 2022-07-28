@@ -3,10 +3,10 @@ use std::fmt;
 use std::ops;
 
 use crate::build_common::*;
+use crate::codegen::MachineInstruction;
 use crate::codegen::REGISTERS;
 use crate::interface;
 use crate::log;
-use crate::rv64_i::MEMORY_SIZE;
 
 #[allow(dead_code)] // Dead code analysis doesn't check in generated code.
 pub enum ImplementationArg {
@@ -240,11 +240,7 @@ pub struct InstructionSource {
   pub syntax: &'static [&'static str],
   pub description: &'static str,
   pub implementation_str: &'static str,
-  pub implementation: fn(
-    Vec<ImplementationArg>,
-  ) -> Box<
-    dyn Fn(&mut [Register; 32], &mut PC, &mut [u8; MEMORY_SIZE]),
-  >,
+  pub implementation: fn(Vec<ImplementationArg>) -> MachineInstruction,
 }
 
 impl fmt::Debug for InstructionSource {
@@ -257,7 +253,7 @@ impl fmt::Debug for InstructionSource {
   }
 }
 
-impl<'a> InstructionSource {
+impl InstructionSource {
   pub fn format_error(&self, tokens: Vec<String>) {
     interface::alert(format!("Invalid instruction format. Instruction \"{}\" should have format \"{}\" but instead had \"{}\"", self.mnemonic, self.syntax.join(" "), tokens.join(" ")).as_str());
   }
@@ -310,7 +306,7 @@ impl<'a> InstructionSource {
         return None;
       }
     }
-    return Some(arguments);
+    Some(arguments)
   }
 }
 
@@ -319,8 +315,7 @@ pub struct Instruction {
   pub source: &'static InstructionSource,
   pub line_num: u32, // 1 indexed
   pub breakpoint: bool,
-  pub implementation:
-    Box<dyn Fn(&mut [Register; 32], &mut PC, &mut [u8; MEMORY_SIZE])>,
+  pub implementation: MachineInstruction,
 }
 
 impl fmt::Debug for Instruction {
@@ -337,7 +332,7 @@ fn parse_imm<const ARRLEN: usize>(input: String) -> Option<[bool; ARRLEN]> {
   let mut bitvec: [bool; ARRLEN] = [false; ARRLEN];
   let val: i32 = parse_int::parse::<i32>(&input).ok()?;
   let upper_bound: i32 = 1 << ARRLEN;
-  let lower_bound: i32 = -1 * (1 << ARRLEN - 1);
+  let lower_bound: i32 = -(1 << (ARRLEN - 1));
   if val < lower_bound || val >= upper_bound {
     log!(
       "parse_imm<{}>({}): Require {} < {} <= {}",
@@ -349,10 +344,10 @@ fn parse_imm<const ARRLEN: usize>(input: String) -> Option<[bool; ARRLEN]> {
     );
     return None;
   }
-  for i in 0..ARRLEN {
-    bitvec[i] = (val >> i) & 1 == 1;
+  for (i, bit) in bitvec.iter_mut().enumerate() {
+    *bit = (val >> i) & 1 == 1;
   }
-  return Some(bitvec);
+  Some(bitvec)
 }
 
 #[cfg(test)]
