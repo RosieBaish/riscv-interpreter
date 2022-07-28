@@ -374,64 +374,41 @@ Memory addresses must be from 0x00000000 - 0x7fffffff</td></tr>",
     }
     assert_eq!(lines_elements.length(), 1);
 
-    let max_line_num = document
-      .get_element_by_id("code")
-      .unwrap() // De-optionify
-      .dyn_into::<web_sys::HtmlTextAreaElement>() // Cast
-      .unwrap() // Unwrap the cast result
-      .value()
-      .trim()
-      .split('\n')
-      .count() as u32;
+    let lines: web_sys::HtmlCollection =
+      lines_elements.item(0).unwrap().children();
 
-    let lines_element = lines_elements.item(0).unwrap();
-    log!("{}, {}", lines_element.child_element_count(), max_line_num);
-    for i in lines_element.child_element_count()..max_line_num {
-      log!("{}, {}", lines_element.child_element_count(), max_line_num);
-      let new_div =
-        document.create_element("div").expect("Couldn't create div");
-      new_div
-        .class_list()
-        .add_1("lineno")
-        .expect("Couldn't add class");
-      new_div.set_inner_html(&i.to_string());
-      lines_element
-        .append_with_node_1(&new_div)
-        .expect("failed to append new element");
-    }
+    let is_break: Vec<bool>;
+    let next_inst_line_num: u32;
 
-    let lines: web_sys::HtmlCollection = lines_element.children();
-
-    assert!(lines.length() >= max_line_num);
-
-    // Have to create and then set, because of blank lines
+    // Extra scope for interpreter lock
     {
       let interpreter = self.rci.lock().unwrap();
-      let is_break: Vec<bool> = interpreter.breakpoints();
+      is_break = interpreter.breakpoints();
+      next_inst_line_num = interpreter.next_inst_line_num();
+    }
 
-      assert!(max_line_num >= is_break.len() as u32);
-
-      for line_num in 0..lines.length() {
-        let line = lines
-          .item(line_num)
-          .unwrap()
-          .dyn_into::<web_sys::HtmlElement>()
-          .unwrap();
-        self.remove_class_if_present(&line, "lineselect");
-        if is_break[line_num as usize] {
-          line
-            // Unicode big red dot
-            .set_inner_html(format!("🔴 {}", line_num + 1).as_str());
-        } else {
-          line.set_inner_html(format!("{}", line_num + 1).as_str());
-        }
-      }
-      let next_inst_line = lines
-        .item(interpreter.next_inst_line_num())
+    for line_num in 0..std::cmp::min(lines.length(), is_break.len() as u32) {
+      let line = lines
+        .item(line_num)
         .unwrap()
         .dyn_into::<web_sys::HtmlElement>()
         .unwrap();
-      self.add_class_if_missing(&next_inst_line, "lineselect");
+
+      // Set the highlight for the next line
+      if line_num == next_inst_line_num {
+        self.add_class_if_missing(&line, "lineselect");
+      } else {
+        self.remove_class_if_present(&line, "lineselect");
+      }
+
+      // Add breakpoint symbol if required
+      if is_break[line_num as usize] {
+        line
+          // Unicode big red dot
+          .set_inner_html(format!("🔴 {}", line_num + 1).as_str());
+      } else {
+        line.set_inner_html(format!("{}", line_num + 1).as_str());
+      }
     }
   }
 
