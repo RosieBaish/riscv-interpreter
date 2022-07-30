@@ -212,6 +212,11 @@ impl InterpreterTrait for RiscV64_i {
     self.pc.changed = false;
     let inst = &self.instructions[(self.pc.get().value / 4) as usize];
     log!("{:?}", inst);
+    if inst.breakpoint {
+      log!("Breakpoint, stopping");
+      self.running = false;
+      return;
+    }
     (inst.implementation)(&mut self.registers, &mut self.pc, &mut self.memory);
     if !self.pc.changed {
       self.pc.inc(Register { value: 4 });
